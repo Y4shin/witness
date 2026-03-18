@@ -90,6 +90,30 @@ export interface CreateInviteResponse {
 	token: string;
 }
 
+// ── POST /api/submissions ─────────────────────────────────────────────────
+
+/**
+ * Serialised form of an ECDH-wrapped symmetric key.
+ * Stored as JSON string in the DB.
+ */
+export interface SubmissionKeyBundle {
+	ephemeralPublicKey: JsonWebKey;
+	wrappedKey: string; // base64url(salt || iv || wrappedKey+tag)
+}
+
+export interface CreateSubmissionRequest {
+	projectId: string;
+	encryptedPayload: string;    // base64url AES-GCM ciphertext
+	encryptedKeyProject: string; // JSON-serialised SubmissionKeyBundle
+	encryptedKeyUser: string;    // JSON-serialised SubmissionKeyBundle
+	submitterSignature: string;  // base64url ECDSA signature
+	nonce: string;               // single-use challenge nonce
+}
+
+export interface CreateSubmissionResponse {
+	submissionId: string;
+}
+
 // ── FormField ─────────────────────────────────────────────────────────────
 
 export type FieldType = 'TEXT' | 'SELECT' | 'FILE';

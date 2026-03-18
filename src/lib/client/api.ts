@@ -16,6 +16,8 @@ import type {
 	InviteInfoResponse,
 	CreateInviteRequest,
 	CreateInviteResponse,
+	CreateSubmissionRequest,
+	CreateSubmissionResponse,
 	GetFieldsResponse,
 	CreateFieldRequest,
 	CreateFieldResponse,
@@ -88,6 +90,11 @@ export const api = {
 
 		create: (body: CreateInviteRequest): Promise<CreateInviteResponse> =>
 			post('/api/invites', body)
+	},
+
+	submissions: {
+		create: (body: CreateSubmissionRequest): Promise<CreateSubmissionResponse> =>
+			post('/api/submissions', body)
 	},
 
 	fields: {
