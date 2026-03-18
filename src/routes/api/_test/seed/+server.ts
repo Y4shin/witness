@@ -45,5 +45,21 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ projectId: project.id });
 	}
 
+	if (body.type === 'inviteLink') {
+		if (typeof body.projectId !== 'string') {
+			throw error(400, 'projectId is required');
+		}
+		const invite = await db.inviteLink.create({
+			data: {
+				token: body.token ?? crypto.randomUUID(),
+				projectId: body.projectId,
+				role: body.role ?? 'OBSERVER',
+				maxUses: body.maxUses ?? 1,
+				usedCount: body.usedCount ?? 0
+			}
+		});
+		return json({ inviteId: invite.id, token: invite.token });
+	}
+
 	throw error(400, `Unknown type: ${body.type}`);
 };

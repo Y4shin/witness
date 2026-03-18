@@ -8,7 +8,8 @@ export default defineConfig({
 		reuseExistingServer: false,
 		env: {
 			DATABASE_URL: 'file:./tests/test.db',
-			TEST_MODE: 'true'
+			TEST_MODE: 'true',
+			ADMIN_PASSWORD: 'test-admin-password'
 		}
 	},
 	use: {
