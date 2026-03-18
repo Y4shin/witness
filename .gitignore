@@ -29,9 +29,11 @@ project.inlang/cache/
 
 # Prisma generated client
 /src/lib/server/prisma
-# SQLite dev database
-/prisma/*.db
-/prisma/*.db-journal
+# SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 
 # Claude
 .claude/settings.local.json
