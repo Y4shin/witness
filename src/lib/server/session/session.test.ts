@@ -3,9 +3,14 @@ import { createSession, validateSession, deleteSession } from './index';
 import { createTestDb, type TestDb } from '$lib/server/db/test-utils';
 
 // Helper: create a user in the test DB
-async function seedUser(db: TestDb['db'], publicKey = 'pk-test') {
+async function seedUser(db: TestDb['db'], signingPublicKey = 'spk-test') {
 	return db.user.create({
-		data: { publicKey, encryptedName: 'enc-name', encryptedContact: 'enc-contact' }
+		data: {
+			signingPublicKey,
+			encryptionPublicKey: `epk-${signingPublicKey}`,
+			encryptedName: 'enc-name',
+			encryptedContact: 'enc-contact'
+		}
 	});
 }
 
@@ -53,7 +58,7 @@ describe('session management', () => {
 
 		expect(result).not.toBeNull();
 		expect(result!.id).toBe(user.id);
-		expect(result!.publicKey).toBe('pk-test');
+		expect(result!.signingPublicKey).toBe('spk-test');
 	});
 
 	it('each createSession call produces a unique token', async () => {
@@ -136,7 +141,7 @@ describe('session management', () => {
 
 	it('validateSession returns null when the associated user has been deleted', async () => {
 		const { db } = testDb;
-		const user = await seedUser(db, 'pk-to-delete');
+		const user = await seedUser(db, 'spk-to-delete');
 		const token = await createSession(user.id, db);
 
 		// Cascade delete removes the session along with the user

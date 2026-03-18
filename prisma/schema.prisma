@@ -35,11 +35,12 @@ model Project {
 }
 
 model User {
-  id               String   @id @default(uuid())
-  publicKey        String   @unique
-  encryptedName    String   // Encrypted with project public key
-  encryptedContact String   // Encrypted with project public key
-  createdAt        DateTime @default(now())
+  id                  String   @id @default(uuid())
+  signingPublicKey    String   @unique  // ECDSA P-256 JWK — used for challenge-response auth and submission signatures
+  encryptionPublicKey String   @unique  // ECDH P-256 JWK — used for hybrid encryption of symmetric keys
+  encryptedName       String            // Encrypted with project public key
+  encryptedContact    String            // Encrypted with project public key
+  createdAt           DateTime @default(now())
 
   memberships Membership[]
   sessions    Session[]

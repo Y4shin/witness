@@ -37,25 +37,27 @@ describe('database', () => {
 		const { db } = testDb;
 		const user = await db.user.create({
 			data: {
-				publicKey: 'pk-abc123',
+				signingPublicKey: 'spk-abc123',
+				encryptionPublicKey: 'epk-abc123',
 				encryptedName: 'enc-name',
 				encryptedContact: 'enc-contact'
 			}
 		});
 
 		expect(user.id).toBeTruthy();
-		expect(user.publicKey).toBe('pk-abc123');
+		expect(user.signingPublicKey).toBe('spk-abc123');
+		expect(user.encryptionPublicKey).toBe('epk-abc123');
 	});
 
-	it('enforces unique publicKey on user', async () => {
+	it('enforces unique signingPublicKey on user', async () => {
 		const { db } = testDb;
 		await db.user.create({
-			data: { publicKey: 'same-key', encryptedName: 'a', encryptedContact: 'b' }
+			data: { signingPublicKey: 'same-spk', encryptionPublicKey: 'epk-1', encryptedName: 'a', encryptedContact: 'b' }
 		});
 
 		await expect(
 			db.user.create({
-				data: { publicKey: 'same-key', encryptedName: 'c', encryptedContact: 'd' }
+				data: { signingPublicKey: 'same-spk', encryptionPublicKey: 'epk-2', encryptedName: 'c', encryptedContact: 'd' }
 			})
 		).rejects.toThrow();
 	});
@@ -64,7 +66,7 @@ describe('database', () => {
 		const { db } = testDb;
 		const project = await db.project.create({ data: { name: 'Cascade Project' } });
 		const user = await db.user.create({
-			data: { publicKey: 'pk-cascade', encryptedName: 'n', encryptedContact: 'c' }
+			data: { signingPublicKey: 'spk-cascade', encryptionPublicKey: 'epk-cascade', encryptedName: 'n', encryptedContact: 'c' }
 		});
 		await db.membership.create({
 			data: { userId: user.id, projectId: project.id, role: 'SUBMITTER' }
