@@ -92,7 +92,7 @@ test.describe('auth API', () => {
 
 		// Seed a user with our known keys
 		const seedRes = await request.post('/api/_test/seed', {
-			data: { signingPublicKey, encryptionPublicKey }
+			data: { type: 'user', signingPublicKey, encryptionPublicKey }
 		});
 		expect(seedRes.status()).toBe(200);
 		const { userId } = await seedRes.json();
@@ -123,7 +123,7 @@ test.describe('auth API', () => {
 	test('second use of the same nonce is rejected (replay prevention)', async ({ request }) => {
 		const { signing, signingPublicKey, encryptionPublicKey } = await generateUserKeys();
 
-		await request.post('/api/_test/seed', { data: { signingPublicKey, encryptionPublicKey } });
+		await request.post('/api/_test/seed', { data: { type: 'user', signingPublicKey, encryptionPublicKey } });
 
 		const { nonce } = await (await request.get('/api/auth/challenge')).json();
 		const signature = await signNonce(signing.privateKey, nonce);
@@ -138,7 +138,7 @@ test.describe('auth API', () => {
 
 	test('verify returns 401 for a wrong signature', async ({ request }) => {
 		const { signing, signingPublicKey, encryptionPublicKey } = await generateUserKeys();
-		await request.post('/api/_test/seed', { data: { signingPublicKey, encryptionPublicKey } });
+		await request.post('/api/_test/seed', { data: { type: 'user', signingPublicKey, encryptionPublicKey } });
 
 		const { nonce } = await (await request.get('/api/auth/challenge')).json();
 		// Sign a different message
@@ -152,7 +152,7 @@ test.describe('auth API', () => {
 
 	test('verify returns 401 when signed with a different private key', async ({ request }) => {
 		const { signingPublicKey, encryptionPublicKey } = await generateUserKeys();
-		await request.post('/api/_test/seed', { data: { signingPublicKey, encryptionPublicKey } });
+		await request.post('/api/_test/seed', { data: { type: 'user', signingPublicKey, encryptionPublicKey } });
 
 		const otherKeys = await generateUserKeys();
 		const { nonce } = await (await request.get('/api/auth/challenge')).json();
@@ -175,7 +175,7 @@ test.describe('auth API', () => {
 		const { signing, signingPublicKey, encryptionPublicKey } = await generateUserKeys();
 
 		// Seed + authenticate via page.request (shares the browser cookie jar)
-		await page.request.post('/api/_test/seed', { data: { signingPublicKey, encryptionPublicKey } });
+		await page.request.post('/api/_test/seed', { data: { type: 'user', signingPublicKey, encryptionPublicKey } });
 		const { nonce } = await (await page.request.get('/api/auth/challenge')).json();
 		const signature = await signNonce(signing.privateKey, nonce);
 		const verifyRes = await page.request.post('/api/auth/verify', {

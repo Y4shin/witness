@@ -3,6 +3,7 @@ import type { RequestHandler } from '@sveltejs/kit';
 import { verifyChallenge, AuthError } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { SESSION_COOKIE_NAME, SESSION_COOKIE_BASE } from '$lib/server/session';
+import type { VerifyResponse } from '$lib/api-types';
 
 export const POST: RequestHandler = async ({ request, cookies, url }) => {
 	let body: unknown;
@@ -16,7 +17,7 @@ export const POST: RequestHandler = async ({ request, cookies, url }) => {
 		const { token } = await verifyChallenge(body, db);
 		const secure = url.protocol === 'https:';
 		cookies.set(SESSION_COOKIE_NAME, token, { ...SESSION_COOKIE_BASE, secure });
-		return json({ ok: true });
+		return json({ ok: true } satisfies VerifyResponse);
 	} catch (err) {
 		if (err instanceof AuthError) {
 			throw error(err.statusCode, err.message);
