@@ -110,23 +110,19 @@ test.describe('admin console', () => {
 
 	// ── invite link — single-use ───────────────────────────────────────────
 
-	test('admin invite link is single-use: second claim returns 410', async ({ page, request }) => {
-		// Seed a project and a single-use invite link
+	test('admin invite link is single-use: a fully-used link shows 410', async ({ page, request }) => {
+		// Seed a project and an already-exhausted invite link (usedCount === maxUses)
 		const seedProject = await request.post('/api/_test/seed', {
 			data: { type: 'project', name: 'Single Use Project' }
 		});
 		const { projectId } = await seedProject.json();
 
 		const seedInvite = await request.post('/api/_test/seed', {
-			data: { type: 'inviteLink', projectId, maxUses: 1, usedCount: 0 }
+			data: { type: 'inviteLink', projectId, maxUses: 1, usedCount: 1 }
 		});
 		const { token } = await seedInvite.json();
 
-		// First claim — should redirect to /auth
-		await page.goto(`/invite/${token}`);
-		await expect(page).toHaveURL(/\/auth/);
-
-		// Second claim — should return 410
+		// Visiting an exhausted link should return 410
 		const res = await page.request.get(`/invite/${token}`);
 		expect(res.status()).toBe(410);
 	});

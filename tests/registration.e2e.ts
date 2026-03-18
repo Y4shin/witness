@@ -14,32 +14,45 @@ async function generateProjectKeyPair() {
 	};
 }
 
+// Seeds a project (with public key) and a SUBMITTER invite for it.
+// Returns { projectId, inviteToken }.
+async function seedProjectWithInvite(
+	request: import('@playwright/test').APIRequestContext,
+	projectName: string,
+	role: 'SUBMITTER' | 'OBSERVER' = 'SUBMITTER'
+) {
+	const project = await generateProjectKeyPair();
+	const seedRes = await request.post('/api/_test/seed', {
+		data: { type: 'project', name: projectName, publicKey: project.publicKey }
+	});
+	expect(seedRes.status()).toBe(200);
+	const { projectId } = await seedRes.json();
+
+	const inviteRes = await request.post('/api/_test/seed', {
+		data: { type: 'inviteLink', projectId, role, maxUses: 1 }
+	});
+	expect(inviteRes.status()).toBe(200);
+	const { token: inviteToken } = await inviteRes.json();
+
+	return { projectId, inviteToken };
+}
+
 // ── tests ──────────────────────────────────────────────────────────────────
 
 test.describe('registration flow', () => {
-	test('completing registration stores keys in localStorage and redirects to dashboard', async ({ page }) => {
-		// Seed a project with a public key
-		const project = await generateProjectKeyPair();
-		const seedRes = await page.request.post('/api/_test/seed', {
-			data: { type: 'project', name: 'Test Project', publicKey: project.publicKey }
-		});
-		expect(seedRes.status()).toBe(200);
-		const { projectId } = await seedRes.json();
+	test('completing registration stores keys in localStorage and redirects to dashboard', async ({ page, request }) => {
+		const { projectId, inviteToken } = await seedProjectWithInvite(request, 'Test Project');
 
-		// Navigate to the auth page with project context
-		await page.goto(`/auth?projectId=${projectId}`);
+		await page.goto(`/auth?projectId=${projectId}&inviteToken=${encodeURIComponent(inviteToken)}&role=SUBMITTER`);
 		await page.waitForSelector('form', { timeout: 5000 });
 
-		// Fill in the registration form
 		await page.getByLabel('Name').fill('Alice');
 		await page.getByLabel('Contact').fill('alice@example.com');
 		await page.getByRole('button', { name: 'Register' }).click();
 
-		// Should redirect to dashboard
 		await page.waitForURL('/dashboard', { timeout: 10000 });
 		await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
 
-		// Keys should be in localStorage
 		const storedKeys = await page.evaluate(() => localStorage.getItem('rt:keys'));
 		expect(storedKeys).not.toBeNull();
 		const keys = JSON.parse(storedKeys!);
@@ -49,47 +62,38 @@ test.describe('registration flow', () => {
 		expect(keys.encryptionPrivateKey).toBeTruthy();
 	});
 
-	test('registration does not store keys if POST /api/users fails', async ({ page }) => {
-		const project = await generateProjectKeyPair();
-		const seedRes = await page.request.post('/api/_test/seed', {
-			data: { type: 'project', name: 'Fail Project', publicKey: project.publicKey }
-		});
-		const { projectId } = await seedRes.json();
+	test('registration does not store keys if POST /api/users fails', async ({ page, request }) => {
+		const { projectId, inviteToken } = await seedProjectWithInvite(request, 'Fail Project');
 
-		// Intercept and fail the user registration request
-		await page.route('/api/users', (route) => route.fulfill({ status: 500, body: JSON.stringify({ message: 'Server error' }) }));
+		await page.route('/api/users', (route) =>
+			route.fulfill({ status: 500, body: JSON.stringify({ message: 'Server error' }) })
+		);
 
-		await page.goto(`/auth?projectId=${projectId}`);
+		await page.goto(`/auth?projectId=${projectId}&inviteToken=${encodeURIComponent(inviteToken)}&role=SUBMITTER`);
 		await page.waitForSelector('form', { timeout: 5000 });
 		await page.getByLabel('Name').fill('Bob');
 		await page.getByLabel('Contact').fill('bob@example.com');
 		await page.getByRole('button', { name: 'Register' }).click();
 
-		// Should show an error, not navigate away
 		await expect(page.getByRole('alert')).toBeVisible({ timeout: 5000 });
 		expect(page.url()).toContain('/auth');
 
-		// Keys must NOT be stored
 		const storedKeys = await page.evaluate(() => localStorage.getItem('rt:keys'));
 		expect(storedKeys).toBeNull();
 	});
 
 	test('shows validation context when there is no projectId', async ({ page }) => {
 		await page.goto('/auth');
-		// Wait for SSR-skip: the page loads as a client-only shell
 		await page.waitForLoadState('networkidle');
 		await expect(page.getByRole('alert')).toBeVisible({ timeout: 5000 });
 	});
 
-	test('returns to register form after start over clears localStorage', async ({ page }) => {
-		// First, register successfully
-		const project = await generateProjectKeyPair();
-		const seedRes = await page.request.post('/api/_test/seed', {
-			data: { type: 'project', name: 'Start Over Project', publicKey: project.publicKey }
-		});
-		const { projectId } = await seedRes.json();
+	test('returns to register form after start over clears localStorage', async ({ page, request }) => {
+		const { projectId, inviteToken } = await seedProjectWithInvite(request, 'Start Over Project');
+		const authUrl = `/auth?projectId=${projectId}&inviteToken=${encodeURIComponent(inviteToken)}&role=SUBMITTER`;
 
-		await page.goto(`/auth?projectId=${projectId}`);
+		// First, register successfully
+		await page.goto(authUrl);
 		await page.waitForSelector('form', { timeout: 5000 });
 		await page.getByLabel('Name').fill('Carol');
 		await page.getByLabel('Contact').fill('carol@example.com');
@@ -99,8 +103,8 @@ test.describe('registration flow', () => {
 		// Clear localStorage to simulate key loss
 		await page.evaluate(() => localStorage.removeItem('rt:keys'));
 
-		// Visit auth again — should show register form, not auto-login
-		await page.goto(`/auth?projectId=${projectId}`);
+		// Visit auth again with same URL — should show register form, not auto-login
+		await page.goto(authUrl);
 		await page.waitForSelector('form', { timeout: 5000 });
 		await expect(page.getByRole('button', { name: 'Register' })).toBeVisible();
 	});
@@ -110,32 +114,22 @@ test.describe('registration flow', () => {
 		await expect(page).toHaveURL(/\/auth/);
 	});
 
-	test('submitting with an empty name keeps the button disabled', async ({ page }) => {
-		const project = await generateProjectKeyPair();
-		const seedRes = await page.request.post('/api/_test/seed', {
-			data: { type: 'project', name: 'Validation Project', publicKey: project.publicKey }
-		});
-		const { projectId } = await seedRes.json();
+	test('submitting with an empty name keeps the button disabled', async ({ page, request }) => {
+		const { projectId, inviteToken } = await seedProjectWithInvite(request, 'Validation Project');
 
-		await page.goto(`/auth?projectId=${projectId}`);
+		await page.goto(`/auth?projectId=${projectId}&inviteToken=${encodeURIComponent(inviteToken)}&role=SUBMITTER`);
 		await page.waitForSelector('form', { timeout: 5000 });
 
-		// Only fill contact, leave name empty
 		await page.getByLabel('Contact').fill('dave@example.com');
 		await expect(page.getByRole('button', { name: 'Register' })).toBeDisabled();
 	});
 
-	test('submitting with an empty contact keeps the button disabled', async ({ page }) => {
-		const project = await generateProjectKeyPair();
-		const seedRes = await page.request.post('/api/_test/seed', {
-			data: { type: 'project', name: 'Validation Project 2', publicKey: project.publicKey }
-		});
-		const { projectId } = await seedRes.json();
+	test('submitting with an empty contact keeps the button disabled', async ({ page, request }) => {
+		const { projectId, inviteToken } = await seedProjectWithInvite(request, 'Validation Project 2');
 
-		await page.goto(`/auth?projectId=${projectId}`);
+		await page.goto(`/auth?projectId=${projectId}&inviteToken=${encodeURIComponent(inviteToken)}&role=SUBMITTER`);
 		await page.waitForSelector('form', { timeout: 5000 });
 
-		// Only fill name, leave contact empty
 		await page.getByLabel('Name').fill('Dave');
 		await expect(page.getByRole('button', { name: 'Register' })).toBeDisabled();
 	});

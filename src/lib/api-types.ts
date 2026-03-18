@@ -49,6 +49,26 @@ export interface ProjectPublicKeyResponse {
 	publicKey: string;
 }
 
+// ── PATCH /api/projects/[id]/public-key ───────────────────────────────────
+
+export interface SetProjectPublicKeyRequest {
+	publicKey: string;
+}
+
+// ── POST /api/memberships ─────────────────────────────────────────────────
+
+export interface JoinProjectRequest {
+	inviteToken: string;
+	/** ECDH private key encrypted with the user's own ECDH public key.
+	 *  Required for the first observer to initialise the project keypair. */
+	encryptedProjectPrivateKey?: string | null;
+}
+
+export interface JoinProjectResponse {
+	projectId: string;
+	role: 'SUBMITTER' | 'OBSERVER';
+}
+
 // ── GET /api/invites/[token] ───────────────────────────────────────────────
 
 export interface InviteInfoResponse {

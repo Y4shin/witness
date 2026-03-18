@@ -88,3 +88,27 @@ export function jwkToString(jwk: JsonWebKey): string {
 export function stringToJwk(s: string): JsonWebKey {
 	return JSON.parse(s) as JsonWebKey;
 }
+
+// ── Project keypair helpers ────────────────────────────────────────────────
+
+/**
+ * Exports an ECDH private key as raw PKCS#8 bytes for encrypted storage.
+ * The caller is responsible for encrypting these bytes before persisting.
+ */
+export async function exportPrivateKeyPkcs8(key: CryptoKey): Promise<Uint8Array> {
+	const buf = await crypto.subtle.exportKey('pkcs8', key);
+	return new Uint8Array(buf);
+}
+
+/**
+ * Imports an ECDH P-256 private key from raw PKCS#8 bytes.
+ */
+export async function importEcdhPrivateKey(pkcs8: Uint8Array): Promise<CryptoKey> {
+	return crypto.subtle.importKey(
+		'pkcs8',
+		pkcs8,
+		{ name: 'ECDH', namedCurve: 'P-256' },
+		true,
+		['deriveKey', 'deriveBits']
+	);
+}

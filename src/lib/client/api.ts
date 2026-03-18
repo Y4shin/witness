@@ -10,6 +10,9 @@ import type {
 	RegisterRequest,
 	RegisterResponse,
 	ProjectPublicKeyResponse,
+	SetProjectPublicKeyRequest,
+	JoinProjectRequest,
+	JoinProjectResponse,
 	InviteInfoResponse,
 	CreateInviteRequest,
 	CreateInviteResponse
@@ -59,7 +62,19 @@ export const api = {
 
 	projects: {
 		getPublicKey: (projectId: string): Promise<ProjectPublicKeyResponse> =>
-			call(`/api/projects/${projectId}/public-key`)
+			call(`/api/projects/${projectId}/public-key`),
+
+		setPublicKey: (projectId: string, body: SetProjectPublicKeyRequest): Promise<ProjectPublicKeyResponse> =>
+			call(`/api/projects/${projectId}/public-key`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			})
+	},
+
+	memberships: {
+		join: (body: JoinProjectRequest): Promise<JoinProjectResponse> =>
+			post('/api/memberships', body)
 	},
 
 	invites: {

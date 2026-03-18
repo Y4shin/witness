@@ -5,9 +5,11 @@
 	import RegistrationForm from '$lib/components/RegistrationForm.svelte';
 	import {
 		generateUserKeyBundle,
+		generateProjectKeyPair,
 		exportUserKeyBundleJwk,
 		importUserKeyBundleJwk,
 		exportPublicKeyJwk,
+		exportPrivateKeyPkcs8,
 		jwkToString,
 		stringToJwk,
 		importEcdhPublicKey,
@@ -20,12 +22,15 @@
 	import { api, ApiError } from '$lib/client/api';
 
 	type Mode = 'loading' | 'register' | 'submitting' | 'login' | 'error';
+	type Role = 'SUBMITTER' | 'OBSERVER';
 
 	let mode = $state<Mode>('loading');
 	let formError = $state('');
 	let statusMessage = $state('');
 
 	const projectId = $derived(page.url.searchParams.get('projectId'));
+	const inviteToken = $derived(page.url.searchParams.get('inviteToken'));
+	const role = $derived(page.url.searchParams.get('role') as Role | null);
 
 	// ── auth helpers ───────────────────────────────────────────────────────────
 
@@ -57,7 +62,7 @@
 	// ── registration (first-time user) ────────────────────────────────────────
 
 	async function handleRegister(data: { name: string; contact: string }): Promise<void> {
-		if (!projectId) {
+		if (!projectId || !inviteToken || !role) {
 			formError = 'Missing project context. Please use an invite link.';
 			return;
 		}
@@ -68,11 +73,67 @@
 		try {
 			statusMessage = 'Generating keys…';
 			const bundle = await generateUserKeyBundle();
+			const jwks = await exportUserKeyBundleJwk(bundle);
 
-			statusMessage = 'Fetching project public key…';
-			const { publicKey: projectPubKeyStr } = await api.projects.getPublicKey(projectId);
-			const projectPublicKey = await importEcdhPublicKey(stringToJwk(projectPubKeyStr));
+			// ── Determine if this is the first observer (project has no key yet) ──
+			let projectPublicKey: CryptoKey;
+			let encryptedProjectPrivateKey: string | null = null;
+			// Held for upload after authentication (PATCH requires an active session)
+			let pendingProjectPublicKeyJwk: string | null = null;
 
+			if (role === 'OBSERVER') {
+				let existingKeyStr: string | null = null;
+				try {
+					const resp = await api.projects.getPublicKey(projectId);
+					existingKeyStr = resp.publicKey;
+				} catch (err) {
+					if (!(err instanceof ApiError && err.status === 404)) throw err;
+					// 404 means no key yet — this is the first observer
+				}
+
+				if (existingKeyStr) {
+					// Subsequent observer: project key already exists
+					projectPublicKey = await importEcdhPublicKey(stringToJwk(existingKeyStr));
+				} else {
+					// First observer: generate the project keypair
+					statusMessage = 'Generating project keys…';
+					const projectKeyPair = await generateProjectKeyPair();
+					const projectPubJwk = await exportPublicKeyJwk(projectKeyPair.publicKey);
+					projectPublicKey = projectKeyPair.publicKey;
+					pendingProjectPublicKeyJwk = jwkToString(projectPubJwk);
+
+					// Encrypt the project private key for storage in our own membership
+					const pkcs8 = await exportPrivateKeyPkcs8(projectKeyPair.privateKey);
+					const symKey = await generateSymmetricKey();
+					const [encryptedPayload, encryptedSymKey] = await Promise.all([
+						encryptSymmetric(symKey, pkcs8),
+						encryptSymmetricKeyFor(
+							symKey,
+							await importEcdhPublicKey(jwks.encryptionPublicKey)
+						)
+					]);
+					encryptedProjectPrivateKey = JSON.stringify({
+						payload: encryptedPayload,
+						key: encryptedSymKey
+					});
+				}
+			} else {
+				// Submitter: project must already have a public key
+				statusMessage = 'Fetching project public key…';
+				let keyStr: string;
+				try {
+					const resp = await api.projects.getPublicKey(projectId);
+					keyStr = resp.publicKey;
+				} catch (err) {
+					if (err instanceof ApiError && err.status === 404) {
+						throw new Error('This project is not ready yet. Please contact the project admin.');
+					}
+					throw err;
+				}
+				projectPublicKey = await importEcdhPublicKey(stringToJwk(keyStr));
+			}
+
+			// ── Encrypt name + contact with project public key ─────────────────
 			statusMessage = 'Encrypting your data…';
 			const [nameKey, contactKey] = await Promise.all([
 				generateSymmetricKey(),
@@ -89,8 +150,8 @@
 			const encryptedName = JSON.stringify({ payload: encryptedNamePayload, key: encryptedNameKey });
 			const encryptedContact = JSON.stringify({ payload: encryptedContactPayload, key: encryptedContactKey });
 
+			// ── Create user account ────────────────────────────────────────────
 			statusMessage = 'Registering…';
-			const jwks = await exportUserKeyBundleJwk(bundle);
 			await api.users.register({
 				signingPublicKey: jwkToString(jwks.signingPublicKey),
 				encryptionPublicKey: jwkToString(jwks.encryptionPublicKey),
@@ -98,15 +159,25 @@
 				encryptedContact
 			});
 
+			// ── Authenticate (get session cookie) ──────────────────────────────
 			statusMessage = 'Authenticating…';
-			const spkJwk = jwkToString(jwks.signingPublicKey);
-			await challengeResponse(bundle.signing.privateKey, spkJwk);
+			await challengeResponse(bundle.signing.privateKey, jwkToString(jwks.signingPublicKey));
 
-			// Persist keys only after full success
+			// ── Upload project public key now that we are authenticated ─────────
+			if (pendingProjectPublicKeyJwk) {
+				statusMessage = 'Uploading project key…';
+				await api.projects.setPublicKey(projectId, { publicKey: pendingProjectPublicKeyJwk });
+			}
+
+			// ── Create membership (validates + consumes invite token) ──────────
+			statusMessage = 'Joining project…';
+			await api.memberships.join({ inviteToken, encryptedProjectPrivateKey });
+
+			// Persist keys only after the full flow succeeds
 			saveKeys(jwks);
 			await goto('/dashboard');
 		} catch (err) {
-			formError = err instanceof ApiError ? err.message : 'Registration failed';
+			formError = err instanceof ApiError ? err.message : (err instanceof Error ? err.message : 'Registration failed');
 			mode = 'register';
 		}
 	}
@@ -138,7 +209,7 @@
 
 			{:else if mode === 'register'}
 				<h1 class="card-title text-2xl mb-4">Create account</h1>
-				{#if !projectId}
+				{#if !projectId || !inviteToken}
 					<div role="alert" class="alert alert-warning">
 						<span>No project context found. Please use a valid invite link.</span>
 					</div>
