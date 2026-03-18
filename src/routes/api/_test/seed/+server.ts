@@ -81,5 +81,21 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ userId: membership.userId, projectId: membership.projectId, role: membership.role });
 	}
 
+	if (body.type === 'submission') {
+		if (typeof body.projectId !== 'string') throw error(400, 'projectId is required');
+		if (typeof body.userId !== 'string') throw error(400, 'userId is required');
+		const submission = await db.submission.create({
+			data: {
+				projectId: body.projectId,
+				userId: body.userId,
+				encryptedPayload: body.encryptedPayload ?? 'test-payload',
+				encryptedKeyProject: body.encryptedKeyProject ?? '{}',
+				encryptedKeyUser: body.encryptedKeyUser ?? '{}',
+				submitterSignature: body.submitterSignature ?? 'test-sig'
+			}
+		});
+		return json({ submissionId: submission.id });
+	}
+
 	throw error(400, `Unknown type: ${body.type}`);
 };

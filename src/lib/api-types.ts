@@ -160,6 +160,23 @@ export interface PatchFieldResponse {
 	field: FormField;
 }
 
+// ── GET /api/projects/[id]/submissions ────────────────────────────────────
+
+export interface SubmissionRecord {
+	id: string;
+	userId: string;
+	projectId: string;
+	encryptedPayload: string;
+	encryptedKeyProject: string;
+	encryptedKeyUser: string;
+	submitterSignature: string;
+	createdAt: string; // ISO-8601
+}
+
+export interface GetSubmissionsResponse {
+	submissions: SubmissionRecord[];
+}
+
 // ── Error shape (SvelteKit error() helper) ─────────────────────────────────
 
 export interface ApiErrorBody {

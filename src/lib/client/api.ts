@@ -18,6 +18,7 @@ import type {
 	CreateInviteResponse,
 	CreateSubmissionRequest,
 	CreateSubmissionResponse,
+	GetSubmissionsResponse,
 	GetFieldsResponse,
 	CreateFieldRequest,
 	CreateFieldResponse,
@@ -94,7 +95,10 @@ export const api = {
 
 	submissions: {
 		create: (body: CreateSubmissionRequest): Promise<CreateSubmissionResponse> =>
-			post('/api/submissions', body)
+			post('/api/submissions', body),
+
+		list: (projectId: string): Promise<GetSubmissionsResponse> =>
+			call(`/api/projects/${projectId}/submissions`)
 	},
 
 	fields: {
