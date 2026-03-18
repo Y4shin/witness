@@ -9,7 +9,10 @@ import type {
 	LogoutResponse,
 	RegisterRequest,
 	RegisterResponse,
-	ProjectPublicKeyResponse
+	ProjectPublicKeyResponse,
+	InviteInfoResponse,
+	CreateInviteRequest,
+	CreateInviteResponse
 } from '$lib/api-types';
 
 export class ApiError extends Error {
@@ -57,5 +60,13 @@ export const api = {
 	projects: {
 		getPublicKey: (projectId: string): Promise<ProjectPublicKeyResponse> =>
 			call(`/api/projects/${projectId}/public-key`)
+	},
+
+	invites: {
+		getInfo: (token: string): Promise<InviteInfoResponse> =>
+			call(`/api/invites/${token}`),
+
+		create: (body: CreateInviteRequest): Promise<CreateInviteResponse> =>
+			post('/api/invites', body)
 	}
 };

@@ -49,6 +49,27 @@ export interface ProjectPublicKeyResponse {
 	publicKey: string;
 }
 
+// ── GET /api/invites/[token] ───────────────────────────────────────────────
+
+export interface InviteInfoResponse {
+	projectId: string;
+	projectName: string;
+	role: 'SUBMITTER' | 'OBSERVER';
+}
+
+// ── POST /api/invites ──────────────────────────────────────────────────────
+
+export interface CreateInviteRequest {
+	projectId: string;
+	role: 'SUBMITTER' | 'OBSERVER';
+	maxUses?: number | null;
+	expiresAt?: string | null; // ISO-8601 date string
+}
+
+export interface CreateInviteResponse {
+	token: string;
+}
+
 // ── Error shape (SvelteKit error() helper) ─────────────────────────────────
 
 export interface ApiErrorBody {

@@ -55,7 +55,9 @@ export const POST: RequestHandler = async ({ request }) => {
 				projectId: body.projectId,
 				role: body.role ?? 'OBSERVER',
 				maxUses: body.maxUses ?? 1,
-				usedCount: body.usedCount ?? 0
+				usedCount: body.usedCount ?? 0,
+				// Accept an ISO-8601 string so tests can create expired links (past dates)
+				expiresAt: body.expiresAt ? new Date(body.expiresAt) : null
 			}
 		});
 		return json({ inviteId: invite.id, token: invite.token });
