@@ -15,7 +15,12 @@ import type {
 	JoinProjectResponse,
 	InviteInfoResponse,
 	CreateInviteRequest,
-	CreateInviteResponse
+	CreateInviteResponse,
+	GetFieldsResponse,
+	CreateFieldRequest,
+	CreateFieldResponse,
+	PatchFieldRequest,
+	PatchFieldResponse
 } from '$lib/api-types';
 
 export class ApiError extends Error {
@@ -83,5 +88,23 @@ export const api = {
 
 		create: (body: CreateInviteRequest): Promise<CreateInviteResponse> =>
 			post('/api/invites', body)
+	},
+
+	fields: {
+		list: (projectId: string): Promise<GetFieldsResponse> =>
+			call(`/api/projects/${projectId}/fields`),
+
+		create: (projectId: string, body: CreateFieldRequest): Promise<CreateFieldResponse> =>
+			post(`/api/projects/${projectId}/fields`, body),
+
+		reorder: (projectId: string, fieldId: string, body: PatchFieldRequest): Promise<PatchFieldResponse> =>
+			call(`/api/projects/${projectId}/fields/${fieldId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			}),
+
+		delete: (projectId: string, fieldId: string): Promise<{ ok: boolean }> =>
+			call(`/api/projects/${projectId}/fields/${fieldId}`, { method: 'DELETE' })
 	}
 };

@@ -90,6 +90,52 @@ export interface CreateInviteResponse {
 	token: string;
 }
 
+// ── FormField ─────────────────────────────────────────────────────────────
+
+export type FieldType = 'TEXT' | 'SELECT' | 'FILE';
+
+/** Raw shape returned by the server. `options` is a JSON string for SELECT, null otherwise. */
+export interface FormField {
+	id: string;
+	projectId: string;
+	label: string;
+	type: FieldType;
+	options: string | null; // JSON-encoded string[], e.g. '["A","B"]'
+	required: boolean;
+	sortOrder: number;
+	createdAt: string; // ISO-8601
+}
+
+// ── GET /api/projects/[id]/fields ─────────────────────────────────────────
+
+export interface GetFieldsResponse {
+	fields: FormField[];
+}
+
+// ── POST /api/projects/[id]/fields ────────────────────────────────────────
+
+export interface CreateFieldRequest {
+	label: string;
+	type: FieldType;
+	options?: string[] | null; // parsed array; server will JSON.stringify
+	required?: boolean;
+	sortOrder?: number;
+}
+
+export interface CreateFieldResponse {
+	field: FormField;
+}
+
+// ── PATCH /api/projects/[id]/fields/[fieldId] ─────────────────────────────
+
+export interface PatchFieldRequest {
+	sortOrder: number;
+}
+
+export interface PatchFieldResponse {
+	field: FormField;
+}
+
 // ── Error shape (SvelteKit error() helper) ─────────────────────────────────
 
 export interface ApiErrorBody {
