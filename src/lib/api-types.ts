@@ -90,6 +90,10 @@ export interface CreateInviteResponse {
 	token: string;
 }
 
+// ── Submission types ──────────────────────────────────────────────────────
+
+export type SubmissionType = 'YOUTUBE_VIDEO' | 'WEBPAGE' | 'INSTAGRAM_POST' | 'INSTAGRAM_STORY';
+
 // ── POST /api/submissions ─────────────────────────────────────────────────
 
 /**
@@ -103,6 +107,8 @@ export interface SubmissionKeyBundle {
 
 export interface CreateSubmissionRequest {
 	projectId: string;
+	type: SubmissionType;
+	archiveCandidateUrl?: string | null; // Plaintext URL to archive (not sensitive)
 	encryptedPayload: string;    // base64url AES-GCM ciphertext
 	encryptedKeyProject: string; // JSON-serialised SubmissionKeyBundle
 	encryptedKeyUser: string;    // JSON-serialised SubmissionKeyBundle
@@ -112,6 +118,28 @@ export interface CreateSubmissionRequest {
 
 export interface CreateSubmissionResponse {
 	submissionId: string;
+}
+
+// ── POST /api/submissions/[id]/files ──────────────────────────────────────
+
+export interface UploadFileRequest {
+	fieldName: string;
+	mimeType: string;
+	encryptedData: string;   // base64url AES-GCM ciphertext of file bytes
+	encryptedKey: string;    // JSON-serialised SubmissionKeyBundle (encrypted for project)
+	encryptedKeyUser: string; // JSON-serialised SubmissionKeyBundle (encrypted for user)
+}
+
+export interface UploadFileResponse {
+	fileId: string;
+}
+
+export interface FileRecord {
+	id: string;
+	fieldName: string;
+	mimeType: string | null;
+	sizeBytes: number;
+	createdAt: string;
 }
 
 // ── FormField ─────────────────────────────────────────────────────────────
@@ -212,11 +240,14 @@ export interface SubmissionRecord {
 	id: string;
 	userId: string;
 	projectId: string;
+	type: SubmissionType;
+	archiveUrl: string | null;
 	encryptedPayload: string;
 	encryptedKeyProject: string;
 	encryptedKeyUser: string;
 	submitterSignature: string;
 	createdAt: string; // ISO-8601
+	fileCount: number;
 }
 
 export interface GetSubmissionsResponse {

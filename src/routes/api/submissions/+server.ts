@@ -3,7 +3,10 @@ import type { RequestHandler } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { logger } from '$lib/server/logger';
 import { importEcdsaPublicKey, stringToJwk, verify } from '$lib/crypto';
-import type { CreateSubmissionRequest, CreateSubmissionResponse } from '$lib/api-types';
+import { tryArchive } from '$lib/server/archive';
+import type { CreateSubmissionRequest, CreateSubmissionResponse, SubmissionType } from '$lib/api-types';
+
+const VALID_TYPES: SubmissionType[] = ['YOUTUBE_VIDEO', 'WEBPAGE', 'INSTAGRAM_POST', 'INSTAGRAM_STORY'];
 
 /**
  * POST /api/submissions
@@ -36,9 +39,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		throw error(400, 'submitterSignature is required');
 	if (typeof b.nonce !== 'string' || !b.nonce)
 		throw error(400, 'nonce is required');
+	if (typeof b.type !== 'string' || !VALID_TYPES.includes(b.type as SubmissionType))
+		throw error(400, `type must be one of: ${VALID_TYPES.join(', ')}`);
+	if (b.archiveCandidateUrl !== undefined && b.archiveCandidateUrl !== null && typeof b.archiveCandidateUrl !== 'string')
+		throw error(400, 'archiveCandidateUrl must be a string or null');
 
-	const { projectId, encryptedPayload, encryptedKeyProject, encryptedKeyUser, submitterSignature, nonce } =
-		b as CreateSubmissionRequest;
+	const { projectId, type, archiveCandidateUrl, encryptedPayload, encryptedKeyProject, encryptedKeyUser, submitterSignature, nonce } =
+		b as unknown as CreateSubmissionRequest;
 
 	// Verify membership (any role can submit)
 	const membership = await db.membership.findUnique({
@@ -82,6 +89,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		data: {
 			projectId,
 			userId: locals.user.id,
+			type,
+			archiveCandidateUrl: archiveCandidateUrl ?? null,
 			encryptedPayload,
 			encryptedKeyProject,
 			encryptedKeyUser,
@@ -90,9 +99,21 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	});
 
 	logger.info(
-		{ submissionId: submission.id, projectId, userId: locals.user.id },
+		{ submissionId: submission.id, projectId, userId: locals.user.id, type },
 		'Submission received'
 	);
+
+	// Fire archive attempt asynchronously (best-effort, does not block response)
+	if (archiveCandidateUrl) {
+		tryArchive(archiveCandidateUrl).then((archiveUrl) => {
+			if (archiveUrl) {
+				return db.submission.update({
+					where: { id: submission.id },
+					data: { archiveUrl }
+				});
+			}
+		}).catch(() => {});
+	}
 
 	return json({ submissionId: submission.id } satisfies CreateSubmissionResponse, { status: 201 });
 };

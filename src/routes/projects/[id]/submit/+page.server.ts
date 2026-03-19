@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	if (!project) throw error(404, 'Project not found');
 	if (!project.publicKey) throw error(400, 'Project is not ready yet — no public key');
 
-	const fields = await db.formField.findMany({
+	const formFields = await db.formField.findMany({
 		where: { projectId: params.id },
 		orderBy: { sortOrder: 'asc' }
 	});
@@ -22,6 +22,6 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	return {
 		projectId: params.id,
 		projectPublicKey: project.publicKey,
-		fields
+		formFields
 	};
 };

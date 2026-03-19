@@ -8,7 +8,9 @@
 	} from '$lib/crypto';
 	import { loadStoredKeys } from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
+	import { SUBMISSION_TYPE_LABELS } from '$lib/submission-types';
 	import type { EncryptedKey } from '$lib/crypto/asymmetric';
+	import type { SubmissionType } from '$lib/api-types';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -17,6 +19,9 @@
 		id: string;
 		userId: string;
 		createdAt: string;
+		type: SubmissionType;
+		archiveUrl: string | null;
+		fileCount: number;
 		fields: Record<string, string>;
 		decryptError?: string;
 	};
@@ -63,12 +68,15 @@
 						}
 						const plaintext = await decryptSymmetric(symKey, s.encryptedPayload);
 						const fields = JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, string>;
-						return { id: s.id, userId: s.userId, createdAt: s.createdAt, fields };
+						return { id: s.id, userId: s.userId, createdAt: s.createdAt, type: s.type, archiveUrl: s.archiveUrl, fileCount: s.fileCount, fields };
 					} catch {
 						return {
 							id: s.id,
 							userId: s.userId,
 							createdAt: s.createdAt,
+							type: s.type,
+							archiveUrl: s.archiveUrl,
+							fileCount: s.fileCount,
 							fields: {},
 							decryptError: 'Decryption failed — key may be missing or corrupted'
 						};
@@ -108,10 +116,29 @@
 			{#each submissions as sub (sub.id)}
 				<div class="card bg-base-100 shadow" data-testid="submission-card">
 					<div class="card-body">
-						<div class="flex items-center justify-between mb-2">
-							<span class="text-xs font-mono opacity-60">ID: {sub.id}</span>
+						<div class="flex items-start justify-between mb-2 gap-2 flex-wrap">
+							<div class="flex items-center gap-2 flex-wrap">
+								<span class="badge badge-primary badge-sm">{SUBMISSION_TYPE_LABELS[sub.type]}</span>
+								{#if sub.fileCount > 0}
+									<span class="badge badge-ghost badge-sm">{sub.fileCount} file{sub.fileCount !== 1 ? 's' : ''}</span>
+								{/if}
+								<span class="text-xs font-mono opacity-60">ID: {sub.id}</span>
+							</div>
 							<span class="text-xs opacity-60">{formatDate(sub.createdAt)}</span>
 						</div>
+
+						{#if sub.archiveUrl}
+							<div class="mb-2">
+								<a
+									href={sub.archiveUrl}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="link link-primary text-xs"
+								>
+									Archive snapshot →
+								</a>
+							</div>
+						{/if}
 
 						{#if sub.decryptError}
 							<div role="alert" class="alert alert-error text-sm">
@@ -120,8 +147,8 @@
 						{:else}
 							<dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
 								{#each Object.entries(sub.fields) as [key, value] (key)}
-									<dt class="font-medium text-sm opacity-70">{key}</dt>
-									<dd class="text-sm">{value}</dd>
+									<dt class="font-medium text-sm opacity-70 capitalize">{key}</dt>
+									<dd class="text-sm break-all">{value}</dd>
 								{/each}
 							</dl>
 						{/if}

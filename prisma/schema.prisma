@@ -20,6 +20,13 @@ enum FieldType {
   FILE
 }
 
+enum SubmissionType {
+  YOUTUBE_VIDEO
+  WEBPAGE
+  INSTAGRAM_POST
+  INSTAGRAM_STORY
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Project {
@@ -93,14 +100,17 @@ model InviteLink {
 }
 
 model Submission {
-  id                 String   @id @default(uuid())
-  projectId          String
-  userId             String
-  encryptedPayload   String   // AES-GCM ciphertext of form data (JSON)
-  encryptedKeyProject String  // Symmetric key encrypted with project public key
-  encryptedKeyUser   String   // Symmetric key encrypted with submitter's public key
-  submitterSignature String   // Signature over (nonce || SHA-256(encryptedPayload))
-  createdAt          DateTime @default(now())
+  id                   String         @id @default(uuid())
+  projectId            String
+  userId               String
+  type                 SubmissionType @default(WEBPAGE)
+  archiveCandidateUrl  String?        // Plaintext URL submitted for archiving (not sensitive)
+  archiveUrl           String?        // URL returned by archive.ph after archiving
+  encryptedPayload     String         // AES-GCM ciphertext of form data (JSON)
+  encryptedKeyProject  String         // Symmetric key encrypted with project public key
+  encryptedKeyUser     String         // Symmetric key encrypted with submitter's public key
+  submitterSignature   String         // Signature over (nonce || SHA-256(encryptedPayload))
+  createdAt            DateTime       @default(now())
 
   project Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -111,6 +121,7 @@ model SubmissionFile {
   id               String   @id @default(uuid())
   submissionId     String
   fieldName        String
+  mimeType         String?  // MIME type of the original file
   storagePath      String   // Path to encrypted file on disk
   encryptedKey     String   // Symmetric key encrypted with project public key
   encryptedKeyUser String   // Symmetric key encrypted with submitter's public key

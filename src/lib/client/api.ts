@@ -21,6 +21,8 @@ import type {
 	CreateSubmissionRequest,
 	CreateSubmissionResponse,
 	GetSubmissionsResponse,
+	UploadFileRequest,
+	UploadFileResponse,
 	GetMembersResponse,
 	PromoteRequest,
 	PromoteResponse,
@@ -109,7 +111,10 @@ export const api = {
 			post('/api/submissions', body),
 
 		list: (projectId: string): Promise<GetSubmissionsResponse> =>
-			call(`/api/projects/${projectId}/submissions`)
+			call(`/api/projects/${projectId}/submissions`),
+
+		uploadFile: (submissionId: string, body: UploadFileRequest): Promise<UploadFileResponse> =>
+			post(`/api/submissions/${submissionId}/files`, body)
 	},
 
 	members: {

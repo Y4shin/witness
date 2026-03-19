@@ -1,29 +1,30 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import SubmissionForm from '$lib/components/SubmissionForm.svelte';
+	import TypedSubmissionForm from '$lib/components/TypedSubmissionForm.svelte';
 	import {
 		generateSymmetricKey,
 		encryptSymmetric,
 		encryptSymmetricKeyFor,
 		importEcdhPublicKey,
 		importUserKeyBundleJwk,
-		exportPublicKeyJwk,
 		jwkToString,
+		exportPublicKeyJwk,
 		stringToJwk,
 		sign
 	} from '$lib/crypto';
 	import { loadStoredKeys } from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
+	import type { SubmissionType } from '$lib/api-types';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
-	type PageMode = 'loading' | 'form' | 'success' | 'error';
+	type PageMode = 'loading' | 'form' | 'uploading' | 'success' | 'error';
 	let mode = $state<PageMode>('loading');
 	let submitError = $state('');
 	let submissionId = $state('');
+	let uploadProgress = $state('');
 
-	// Keys are loaded from localStorage on mount
 	let userBundle: Awaited<ReturnType<typeof importUserKeyBundleJwk>> | null = null;
 	let userEncryptionPublicKeyJwk: string = '';
 
@@ -34,11 +35,16 @@
 			return;
 		}
 		userBundle = await importUserKeyBundleJwk(stored);
-		userEncryptionPublicKeyJwk = stored.encryptionPublicKey;
+		userEncryptionPublicKeyJwk = JSON.stringify(stored.encryptionPublicKey);
 		mode = 'form';
 	});
 
-	async function handleSubmit(formData: Record<string, string>) {
+	async function handleSubmit(formData: {
+		type: SubmissionType;
+		fields: Record<string, string>;
+		archiveCandidateUrl: string | null;
+		files: File[];
+	}) {
 		if (!userBundle) return;
 
 		submitError = '';
@@ -47,7 +53,7 @@
 			const symKey = await generateSymmetricKey();
 
 			// 2. Encrypt the form payload
-			const plaintext = new TextEncoder().encode(JSON.stringify(formData));
+			const plaintext = new TextEncoder().encode(JSON.stringify(formData.fields));
 			const encryptedPayload = await encryptSymmetric(symKey, plaintext);
 
 			// 3. Encrypt the symmetric key for the project and for ourselves
@@ -59,10 +65,9 @@
 				encryptSymmetricKeyFor(symKey, userEncPublicKey)
 			]);
 
-			// 4. Get a challenge nonce
+			// 4. Get a challenge nonce and sign
 			const { nonce } = await api.auth.challenge();
 
-			// 5. Sign (nonce_bytes || SHA-256(encryptedPayload_bytes))
 			const nonceBytes = new TextEncoder().encode(nonce);
 			const payloadBytes = new TextEncoder().encode(encryptedPayload);
 			const sha256bytes = new Uint8Array(
@@ -72,13 +77,14 @@
 			message.set(nonceBytes);
 			message.set(sha256bytes, nonceBytes.length);
 
-			const signingPubJwk = jwkToString(await exportPublicKeyJwk(userBundle!.signing.publicKey));
-			void signingPubJwk; // used for reference; server looks up by session user
+			void jwkToString(await exportPublicKeyJwk(userBundle!.signing.publicKey));
 			const submitterSignature = await sign(userBundle!.signing.privateKey, message);
 
-			// 6. Submit
+			// 5. Submit
 			const response = await api.submissions.create({
 				projectId: data.projectId,
+				type: formData.type,
+				archiveCandidateUrl: formData.archiveCandidateUrl,
 				encryptedPayload,
 				encryptedKeyProject: JSON.stringify(encKeyForProject),
 				encryptedKeyUser: JSON.stringify(encKeyForUser),
@@ -87,10 +93,40 @@
 			});
 
 			submissionId = response.submissionId;
+
+			// 6. Upload files if any
+			if (formData.files.length > 0) {
+				mode = 'uploading';
+				for (let i = 0; i < formData.files.length; i++) {
+					const file = formData.files[i];
+					uploadProgress = `Uploading file ${i + 1} of ${formData.files.length}…`;
+
+					// Encrypt the file
+					const fileBytes = new Uint8Array(await file.arrayBuffer());
+					const fileSymKey = await generateSymmetricKey();
+					const encryptedDataStr = await encryptSymmetric(fileSymKey, fileBytes);
+
+					// Encrypt the file key for project and user
+					const [encFileKeyForProject, encFileKeyForUser] = await Promise.all([
+						encryptSymmetricKeyFor(fileSymKey, projectPublicKey),
+						encryptSymmetricKeyFor(fileSymKey, userEncPublicKey)
+					]);
+
+					await api.submissions.uploadFile(submissionId, {
+						fieldName: 'evidence',
+						mimeType: file.type || 'application/octet-stream',
+						encryptedData: encryptedDataStr,
+						encryptedKey: JSON.stringify(encFileKeyForProject),
+						encryptedKeyUser: JSON.stringify(encFileKeyForUser)
+					});
+				}
+			}
+
 			mode = 'success';
 		} catch (err) {
 			submitError =
 				err instanceof ApiError ? err.message : (err instanceof Error ? err.message : 'Submission failed');
+			mode = 'form';
 		}
 	}
 </script>
@@ -103,15 +139,13 @@
 
 	{:else if mode === 'form'}
 		<div class="mx-auto max-w-xl">
-			{#if data.fields.length === 0}
-				<p class="text-base-content/60">No fields have been configured for this project yet.</p>
-			{:else}
-				<SubmissionForm
-					fields={data.fields}
-					onsubmit={handleSubmit}
-					error={submitError}
-				/>
-			{/if}
+			<TypedSubmissionForm formFields={data.formFields} onsubmit={handleSubmit} error={submitError} />
+		</div>
+
+	{:else if mode === 'uploading'}
+		<div class="flex flex-col items-center gap-3 mx-auto max-w-xl">
+			<span class="loading loading-spinner loading-lg"></span>
+			<p class="text-sm text-base-content/60">{uploadProgress}</p>
 		</div>
 
 	{:else if mode === 'success'}

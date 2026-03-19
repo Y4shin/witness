@@ -28,7 +28,8 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
 	const rows = await db.submission.findMany({
 		where,
-		orderBy: { createdAt: 'desc' }
+		orderBy: { createdAt: 'desc' },
+		include: { _count: { select: { files: true } } }
 	});
 
 	logger.info(
@@ -41,11 +42,14 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 			id: s.id,
 			userId: s.userId,
 			projectId: s.projectId,
+			type: s.type,
+			archiveUrl: s.archiveUrl,
 			encryptedPayload: s.encryptedPayload,
 			encryptedKeyProject: s.encryptedKeyProject,
 			encryptedKeyUser: s.encryptedKeyUser,
 			submitterSignature: s.submitterSignature,
-			createdAt: s.createdAt.toISOString()
+			createdAt: s.createdAt.toISOString(),
+			fileCount: s._count.files
 		}))
 	} satisfies GetSubmissionsResponse);
 };

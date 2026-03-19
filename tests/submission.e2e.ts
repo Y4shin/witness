@@ -171,7 +171,7 @@ test.describe('submission API', () => {
 		);
 
 		const res = await authed.post('/api/submissions', {
-			data: { projectId, nonce, ...submission }
+			data: { projectId, nonce, type: 'WEBPAGE', ...submission }
 		});
 		expect(res.status()).toBe(201);
 		const body = await res.json();
@@ -204,6 +204,7 @@ test.describe('submission API', () => {
 			data: {
 				projectId,
 				nonce,
+				type: 'WEBPAGE',
 				encryptedPayload: submission.encryptedPayload,
 				encryptedKeyProject: submission.encryptedKeyProject,
 				encryptedKeyUser: submission.encryptedKeyUser,
@@ -228,13 +229,13 @@ test.describe('submission API', () => {
 
 		// First submission succeeds
 		const first = await authed.post('/api/submissions', {
-			data: { projectId, nonce, ...submission }
+			data: { projectId, nonce, type: 'WEBPAGE', ...submission }
 		});
 		expect(first.status()).toBe(201);
 
 		// Second with same nonce fails
 		const second = await authed.post('/api/submissions', {
-			data: { projectId, nonce, ...submission }
+			data: { projectId, nonce, type: 'WEBPAGE', ...submission }
 		});
 		expect(second.status()).toBe(401);
 	});
@@ -252,7 +253,7 @@ test.describe('submission API', () => {
 		);
 
 		const res = await authed.post('/api/submissions', {
-			data: { projectId, nonce: fakeNonce, ...submission }
+			data: { projectId, nonce: fakeNonce, type: 'WEBPAGE', ...submission }
 		});
 		expect(res.status()).toBe(401);
 	});

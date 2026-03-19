@@ -153,7 +153,7 @@ async function postSubmission(
 	const sigBytes = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, signingPrivateKey, message);
 
 	const res = await request.post('/api/submissions', {
-		data: { projectId, nonce, encryptedPayload, encryptedKeyProject, encryptedKeyUser, submitterSignature: b64url(new Uint8Array(sigBytes)) }
+		data: { projectId, nonce, type: 'WEBPAGE', encryptedPayload, encryptedKeyProject, encryptedKeyUser, submitterSignature: b64url(new Uint8Array(sigBytes)) }
 	});
 	expect(res.status()).toBe(201);
 	return (await res.json()).submissionId as string;
