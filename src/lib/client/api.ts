@@ -16,6 +16,8 @@ import type {
 	InviteInfoResponse,
 	CreateInviteRequest,
 	CreateInviteResponse,
+	GetProjectInvitesResponse,
+	RevokeInviteResponse,
 	CreateSubmissionRequest,
 	CreateSubmissionResponse,
 	GetSubmissionsResponse,
@@ -93,7 +95,13 @@ export const api = {
 			call(`/api/invites/${token}`),
 
 		create: (body: CreateInviteRequest): Promise<CreateInviteResponse> =>
-			post('/api/invites', body)
+			post('/api/invites', body),
+
+		listForProject: (projectId: string): Promise<GetProjectInvitesResponse> =>
+			call(`/api/projects/${projectId}/invites`),
+
+		revoke: (token: string): Promise<RevokeInviteResponse> =>
+			call(`/api/invites/${token}`, { method: 'DELETE' })
 	},
 
 	submissions: {

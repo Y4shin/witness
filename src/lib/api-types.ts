@@ -160,6 +160,28 @@ export interface PatchFieldResponse {
 	field: FormField;
 }
 
+// ── GET /api/projects/[id]/invites ────────────────────────────────────────
+
+export interface InviteLinkRecord {
+	id: string;
+	token: string;
+	role: 'SUBMITTER' | 'OBSERVER';
+	maxUses: number | null;
+	usedCount: number;
+	expiresAt: string | null; // ISO-8601
+	createdAt: string; // ISO-8601
+}
+
+export interface GetProjectInvitesResponse {
+	invites: InviteLinkRecord[];
+}
+
+// ── DELETE /api/invites/[token] ────────────────────────────────────────────
+
+export interface RevokeInviteResponse {
+	ok: boolean;
+}
+
 // ── GET /api/projects/[id]/members ────────────────────────────────────────
 
 export interface MemberRecord {

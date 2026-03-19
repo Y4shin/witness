@@ -40,6 +40,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const expiresAt =
 		typeof b.expiresAt === 'string' && b.expiresAt ? new Date(b.expiresAt) : null;
 
+	if (expiresAt !== null && expiresAt <= new Date()) {
+		throw error(400, 'expiresAt must be in the future');
+	}
+
 	const invite = await createInvite(
 		{
 			projectId: b.projectId,
