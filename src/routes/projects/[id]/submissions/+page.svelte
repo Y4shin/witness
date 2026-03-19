@@ -32,6 +32,17 @@
 	let pageError = $state('');
 	let submissions = $state<DecryptedSubmission[]>([]);
 	let refreshing = $state(false);
+	let query = $state('');
+
+	const filtered = $derived(() => {
+		const q = query.trim().toLowerCase();
+		if (!q) return submissions;
+		return submissions.filter((s) => {
+			if (s.id.toLowerCase().includes(q)) return true;
+			if (SUBMISSION_TYPE_LABELS[s.type].toLowerCase().includes(q)) return true;
+			return Object.values(s.fields).some((v) => v.toLowerCase().includes(q));
+		});
+	});
 
 	const CACHE_KEY = `submissions:${data.projectId}`;
 
@@ -148,11 +159,25 @@
 			</div>
 		{/if}
 
+		{#if submissions.length > 0}
+			<div class="mb-4 max-w-2xl">
+				<input
+					type="search"
+					class="input input-bordered w-full"
+					placeholder="Search submissions…"
+					bind:value={query}
+					aria-label="Search submissions"
+				/>
+			</div>
+		{/if}
+
 		{#if submissions.length === 0}
 			<p class="text-base-content/60">No submissions yet.</p>
+		{:else if filtered().length === 0}
+			<p class="text-base-content/60">No submissions match your search.</p>
 		{:else}
 			<div class="flex flex-col gap-4 max-w-2xl">
-				{#each submissions as sub (sub.id)}
+				{#each filtered() as sub (sub.id)}
 					<div class="card bg-base-100 shadow" data-testid="submission-card">
 						<div class="card-body">
 							<div class="flex items-start justify-between mb-2 gap-2 flex-wrap">
