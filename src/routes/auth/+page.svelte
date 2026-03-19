@@ -20,6 +20,7 @@
 	} from '$lib/crypto';
 	import { loadStoredKeys, saveKeys, clearKeys } from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
+	import * as m from '$lib/paraglide/messages';
 
 	type Mode = 'loading' | 'register' | 'submitting' | 'login' | 'error';
 	type Role = 'SUBMITTER' | 'MODERATOR';
@@ -208,7 +209,7 @@
 				</div>
 
 			{:else if mode === 'register'}
-				<h1 class="card-title text-2xl mb-4">Create account</h1>
+				<h1 class="card-title text-2xl mb-4">{m.auth_register_title()}</h1>
 				{#if !projectId || !inviteToken}
 					<div role="alert" class="alert alert-warning">
 						<span>No project context found. Please use a valid invite link.</span>

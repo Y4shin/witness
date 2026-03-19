@@ -13,6 +13,7 @@
 	import type { EncryptedKey } from '$lib/crypto/asymmetric';
 	import type { SubmissionType } from '$lib/api-types';
 	import type { PageData } from './$types';
+	import * as m from '$lib/paraglide/messages';
 
 	let { data }: { data: PageData } = $props();
 
@@ -155,7 +156,7 @@
 		{#if refreshing}
 			<div class="flex items-center gap-2 mb-4 text-sm text-base-content/50">
 				<span class="loading loading-spinner loading-xs"></span>
-				Refreshing…
+				{m.submissions_refreshing()}
 			</div>
 		{/if}
 
@@ -164,7 +165,7 @@
 				<input
 					type="search"
 					class="input input-bordered w-full"
-					placeholder="Search submissions…"
+					placeholder={m.submissions_search_placeholder()}
 					bind:value={query}
 					aria-label="Search submissions"
 				/>
@@ -172,9 +173,9 @@
 		{/if}
 
 		{#if submissions.length === 0}
-			<p class="text-base-content/60">No submissions yet.</p>
+			<p class="text-base-content/60">{m.submissions_no_submissions()}</p>
 		{:else if filtered().length === 0}
-			<p class="text-base-content/60">No submissions match your search.</p>
+			<p class="text-base-content/60">{m.submissions_no_match()}</p>
 		{:else}
 			<div class="flex flex-col gap-4 max-w-2xl">
 				{#each filtered() as sub (sub.id)}
@@ -199,7 +200,7 @@
 										rel="noopener noreferrer"
 										class="link link-primary text-xs"
 									>
-										Archive snapshot →
+										{m.submissions_archive_link()}
 									</a>
 								</div>
 							{/if}

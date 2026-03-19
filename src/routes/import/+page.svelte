@@ -12,6 +12,7 @@
 	import { saveKeys } from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
 	import type { UserKeyBundleJwk } from '$lib/crypto/keys';
+	import * as m from '$lib/paraglide/messages';
 
 	export const ssr = false;
 
@@ -86,24 +87,24 @@
 	}
 </script>
 
-<svelte:head><title>Import keys</title></svelte:head>
+<svelte:head><title>{m.import_title()}</title></svelte:head>
 
 <div class="mx-auto max-w-sm p-6 flex flex-col gap-6">
-	<h1 class="text-2xl font-bold">Import keys</h1>
+	<h1 class="text-2xl font-bold">{m.import_title()}</h1>
 
 	{#if mode === 'loading'}
 		<div class="flex justify-center"><span class="loading loading-spinner loading-lg"></span></div>
 
 	{:else if mode === 'incomplete'}
 		<div role="alert" class="alert alert-error">
-			<span>This link is incomplete or invalid. Please ask the sender to generate a new link.</span>
+			<span>{m.import_incomplete()}</span>
 		</div>
 
 	{:else if mode === 'prompt'}
 		<p class="text-base-content/60 text-sm">Enter the passphrase used when the link was generated.</p>
 		<form class="flex flex-col gap-4" onsubmit={handleImport}>
 			<label class="flex flex-col gap-1">
-				<span class="label-text font-medium">Passphrase</span>
+				<span class="label-text font-medium">{m.import_passphrase_label()}</span>
 				<input
 					type="password"
 					class="input input-bordered"
@@ -121,13 +122,13 @@
 
 			<button type="submit" class="btn btn-primary" disabled={importing} data-testid="import-btn">
 				{#if importing}<span class="loading loading-spinner loading-sm"></span>{/if}
-				Import & sign in
+				{m.import_btn()}
 			</button>
 		</form>
 
 	{:else if mode === 'success'}
 		<div role="status" class="alert alert-success">
-			<span>Keys imported successfully! Redirecting to dashboard…</span>
+			<span>{m.import_success()}</span>
 		</div>
 
 	{:else if mode === 'error'}
