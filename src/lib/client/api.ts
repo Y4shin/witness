@@ -19,6 +19,9 @@ import type {
 	CreateSubmissionRequest,
 	CreateSubmissionResponse,
 	GetSubmissionsResponse,
+	GetMembersResponse,
+	PromoteRequest,
+	PromoteResponse,
 	GetFieldsResponse,
 	CreateFieldRequest,
 	CreateFieldResponse,
@@ -99,6 +102,14 @@ export const api = {
 
 		list: (projectId: string): Promise<GetSubmissionsResponse> =>
 			call(`/api/projects/${projectId}/submissions`)
+	},
+
+	members: {
+		list: (projectId: string): Promise<GetMembersResponse> =>
+			call(`/api/projects/${projectId}/members`),
+
+		promote: (projectId: string, body: PromoteRequest): Promise<PromoteResponse> =>
+			post(`/api/projects/${projectId}/promote`, body)
 	},
 
 	fields: {

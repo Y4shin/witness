@@ -160,6 +160,30 @@ export interface PatchFieldResponse {
 	field: FormField;
 }
 
+// ── GET /api/projects/[id]/members ────────────────────────────────────────
+
+export interface MemberRecord {
+	userId: string;
+	role: 'SUBMITTER' | 'OBSERVER';
+	encryptionPublicKey: string; // JWK string — used by observers to re-encrypt project key
+	joinedAt: string; // ISO-8601
+}
+
+export interface GetMembersResponse {
+	members: MemberRecord[];
+}
+
+// ── POST /api/projects/[id]/promote ───────────────────────────────────────
+
+export interface PromoteRequest {
+	targetUserId: string;
+	encryptedProjectPrivateKey: string; // JSON: { payload, key } encrypted for target user
+}
+
+export interface PromoteResponse {
+	ok: boolean;
+}
+
 // ── GET /api/projects/[id]/submissions ────────────────────────────────────
 
 export interface SubmissionRecord {
