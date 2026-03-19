@@ -102,10 +102,11 @@
 				<label class="flex flex-col gap-1">
 					<span class="label-text text-sm">Max uses (optional)</span>
 					<input
-						type="number"
+						type="text"
+						inputmode="numeric"
+						pattern="[0-9]*"
 						class="input input-bordered input-sm w-28"
 						placeholder="Unlimited"
-						min="1"
 						bind:value={maxUsesStr}
 						aria-label="Max uses"
 					/>

@@ -8,7 +8,21 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		const next = encodeURIComponent(url.pathname);
 		throw redirect(303, `/auth?next=${next}`);
 	}
-	return { userId: locals.user.id };
+
+	const memberships = await db.membership.findMany({
+		where: { userId: locals.user.id },
+		include: { project: { select: { id: true, name: true } } },
+		orderBy: { joinedAt: 'asc' }
+	});
+
+	return {
+		userId: locals.user.id,
+		projects: memberships.map((m) => ({
+			id: m.project.id,
+			name: m.project.name,
+			role: m.role as 'SUBMITTER' | 'OBSERVER'
+		}))
+	};
 };
 
 export const actions: Actions = {

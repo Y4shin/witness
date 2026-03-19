@@ -89,11 +89,7 @@
 	}
 </script>
 
-<div class="min-h-screen p-6">
-	<h1 class="mb-6 text-2xl font-bold">
-		{data.role === 'OBSERVER' ? 'All submissions' : 'My submissions'}
-	</h1>
-
+<div>
 	{#if mode === 'loading'}
 		<div class="flex justify-center">
 			<span class="loading loading-spinner loading-lg"></span>

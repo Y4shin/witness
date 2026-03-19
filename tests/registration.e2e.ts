@@ -51,7 +51,7 @@ test.describe('registration flow', () => {
 		await page.getByRole('button', { name: 'Register' }).click();
 
 		await page.waitForURL('/dashboard', { timeout: 10000 });
-		await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Your projects' })).toBeVisible();
 
 		const storedKeys = await page.evaluate(() => localStorage.getItem('rt:keys'));
 		expect(storedKeys).not.toBeNull();
