@@ -1,4 +1,4 @@
-# Architecture & Stack
+﻿# Architecture & Stack
 
 ## Tech Stack
 
@@ -27,10 +27,10 @@ Authentication is a challenge-response signature flow using the user's keypair. 
 Prisma v7 provides compile-time type safety for all database queries. The schema is the single source of truth. Migrations are managed via `prisma migrate`. The client uses `@prisma/adapter-libsql` as required by Prisma v7's adapter-based connection model. The singleton client lives at `src/lib/server/db/index.ts` and is imported as `$lib/server/db`.
 
 ### Project keypair genesis
-The infrastructure admin creates a project record (id, name) and a one-time observer invite link. The first observer to claim that link generates the project keypair entirely client-side. They upload the project public key and store the project private key encrypted with their own public key. The server never sees the project private key in plaintext.
+The infrastructure admin creates a project record (id, name) and a one-time MODERATOR invite link. The first MODERATOR to claim that link generates the project keypair entirely client-side. They upload the project public key and store the project private key encrypted with their own public key. The server never sees the project private key in plaintext.
 
-### Observer promotion
-When promoting a submitter to observer, an already-authorised observer (online) must decrypt the project private key with their own key and re-encrypt it with the new observer's public key. This is a synchronous operation — the promoting observer must be present.
+### MODERATOR promotion
+When promoting a submitter to MODERATOR, an already-authorised MODERATOR (online) must decrypt the project private key with their own key and re-encrypt it with the new MODERATOR's public key. This is a synchronous operation — the promoting MODERATOR must be present.
 
 ### Local cache
 - **Cold storage**: IndexedDB with AES-GCM encrypted blobs. Encryption key derived from user private key via HKDF.
@@ -86,8 +86,8 @@ src/
         +page.server.ts
         submit/
           +page.svelte          # Submission form (ssr: false)
-        observer/
-          +page.svelte          # Observer view (ssr: false)
+        MODERATOR/
+          +page.svelte          # MODERATOR view (ssr: false)
 
     api/
       projects/

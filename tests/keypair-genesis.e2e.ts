@@ -1,8 +1,8 @@
-/**
+﻿/**
  * E2E tests for Step 9: project keypair genesis.
  *
  * Covers:
- *  - First OBSERVER registration generates the project keypair, uploads the
+ *  - First MODERATOR registration generates the project keypair, uploads the
  *    public key, and stores an encrypted copy of the private key in their
  *    membership record.
  *  - PATCH /api/projects/[id]/public-key returns 409 when a key already exists.
@@ -27,7 +27,7 @@ async function seedProject(
 async function seedInvite(
 	request: import('@playwright/test').APIRequestContext,
 	projectId: string,
-	role: 'OBSERVER' | 'SUBMITTER' = 'OBSERVER'
+	role: 'MODERATOR' | 'SUBMITTER' = 'MODERATOR'
 ) {
 	const res = await request.post('/api/_test/seed', {
 		data: { type: 'inviteLink', projectId, role, maxUses: 1 }
@@ -48,19 +48,19 @@ async function generateEcdhPublicKeyJwk(): Promise<string> {
 // ── tests ──────────────────────────────────────────────────────────────────
 
 test.describe('project keypair genesis', () => {
-	test('first observer registration uploads project public key and stores encrypted private key', async ({
+	test('first MODERATOR registration uploads project public key and stores encrypted private key', async ({
 		page,
 		request
 	}) => {
 		// Project has NO public key yet
 		const projectId = await seedProject(request, 'Genesis Project');
-		const inviteToken = await seedInvite(request, projectId, 'OBSERVER');
+		const inviteToken = await seedInvite(request, projectId, 'MODERATOR');
 
 		await page.goto(
-			`/auth?projectId=${projectId}&inviteToken=${encodeURIComponent(inviteToken)}&role=OBSERVER`
+			`/auth?projectId=${projectId}&inviteToken=${encodeURIComponent(inviteToken)}&role=MODERATOR`
 		);
 		await page.waitForSelector('form', { timeout: 5000 });
-		await page.getByLabel('Name').fill('Alice Observer');
+		await page.getByLabel('Name').fill('Alice MODERATOR');
 		await page.getByLabel('Contact').fill('alice@example.com');
 		await page.getByRole('button', { name: 'Register' }).click();
 
@@ -78,20 +78,20 @@ test.describe('project keypair genesis', () => {
 		expect(jwk.crv).toBe('P-256');
 	});
 
-	test('second observer registration uses existing project public key', async ({
+	test('second MODERATOR registration uses existing project public key', async ({
 		page,
 		request
 	}) => {
 		// Project already has a public key
 		const existingPubKey = await generateEcdhPublicKeyJwk();
-		const projectId = await seedProject(request, 'Two Observer Project', existingPubKey);
-		const inviteToken = await seedInvite(request, projectId, 'OBSERVER');
+		const projectId = await seedProject(request, 'Two MODERATOR Project', existingPubKey);
+		const inviteToken = await seedInvite(request, projectId, 'MODERATOR');
 
 		await page.goto(
-			`/auth?projectId=${projectId}&inviteToken=${encodeURIComponent(inviteToken)}&role=OBSERVER`
+			`/auth?projectId=${projectId}&inviteToken=${encodeURIComponent(inviteToken)}&role=MODERATOR`
 		);
 		await page.waitForSelector('form', { timeout: 5000 });
-		await page.getByLabel('Name').fill('Bob Observer');
+		await page.getByLabel('Name').fill('Bob MODERATOR');
 		await page.getByLabel('Contact').fill('bob@example.com');
 		await page.getByRole('button', { name: 'Register' }).click();
 

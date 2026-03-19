@@ -1,4 +1,4 @@
-/**
+﻿/**
  * E2E tests for Step 12: submission flow.
  *
  * Tests cover POST /api/submissions:
@@ -37,7 +37,7 @@ async function generateUserKeys() {
 
 async function authenticate(
 	request: APIRequestContext,
-	role: 'SUBMITTER' | 'OBSERVER' = 'SUBMITTER',
+	role: 'SUBMITTER' | 'MODERATOR' = 'SUBMITTER',
 	existingProjectId?: string
 ) {
 	const keys = await generateUserKeys();

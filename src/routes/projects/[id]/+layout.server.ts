@@ -18,6 +18,6 @@ export const load: LayoutServerLoad = async ({ params, locals }) => {
 	return {
 		projectId: params.id,
 		projectName: project.name,
-		role: membership.role as 'SUBMITTER' | 'OBSERVER'
+		role: membership.role as 'SUBMITTER' | 'MODERATOR'
 	};
 };

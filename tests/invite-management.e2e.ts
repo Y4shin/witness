@@ -1,10 +1,10 @@
-/**
+﻿/**
  * E2E tests for Step 15: invite link management.
  *
  * Tests cover:
- *  - POST /api/invites — observer creates links with various options
- *  - GET /api/projects/[id]/invites — observer lists links
- *  - DELETE /api/invites/[token] — observer revokes link
+ *  - POST /api/invites — MODERATOR creates links with various options
+ *  - GET /api/projects/[id]/invites — MODERATOR lists links
+ *  - DELETE /api/invites/[token] — MODERATOR revokes link
  *  - Access control: submitter 403, unauthenticated 401
  *  - Expired-at in past returns 400
  *  - max_uses=1 and claiming twice — second claim rejected (410)
@@ -34,7 +34,7 @@ async function generateUserKeys() {
 	return { signing, encryption, signingPublicKey, encryptionPublicKey };
 }
 
-async function seedAndAuth(request: APIRequestContext, role: 'SUBMITTER' | 'OBSERVER' = 'OBSERVER') {
+async function seedAndAuth(request: APIRequestContext, role: 'SUBMITTER' | 'MODERATOR' = 'MODERATOR') {
 	const keys = await generateUserKeys();
 
 	const userRes = await request.post('/api/_test/seed', {
@@ -72,7 +72,7 @@ async function seedAndAuth(request: APIRequestContext, role: 'SUBMITTER' | 'OBSE
 // ── tests ──────────────────────────────────────────────────────────────────
 
 test.describe('invite link management', () => {
-	test('observer can create and list invite links', async ({ request }) => {
+	test('MODERATOR can create and list invite links', async ({ request }) => {
 		const { projectId } = await seedAndAuth(request);
 
 		// Create a submitter invite
@@ -94,11 +94,11 @@ test.describe('invite link management', () => {
 		expect(invites[0].usedCount).toBe(0);
 	});
 
-	test('observer can create an observer invite link', async ({ request }) => {
+	test('MODERATOR can create an MODERATOR invite link', async ({ request }) => {
 		const { projectId } = await seedAndAuth(request);
 
 		const res = await request.post('/api/invites', {
-			data: { projectId, role: 'OBSERVER' }
+			data: { projectId, role: 'MODERATOR' }
 		});
 		expect(res.status()).toBe(201);
 		const { token } = await res.json();
@@ -106,10 +106,10 @@ test.describe('invite link management', () => {
 
 		const listRes = await request.get(`/api/projects/${projectId}/invites`);
 		const { invites } = await listRes.json();
-		expect(invites[0].role).toBe('OBSERVER');
+		expect(invites[0].role).toBe('MODERATOR');
 	});
 
-	test('observer can revoke an invite link', async ({ request }) => {
+	test('MODERATOR can revoke an invite link', async ({ request }) => {
 		const { projectId } = await seedAndAuth(request);
 
 		const createRes = await request.post('/api/invites', {
@@ -188,8 +188,8 @@ test.describe('invite link management', () => {
 	});
 
 	test('submitter cannot revoke invite links (403)', async ({ request }) => {
-		// Seed observer to create a link, then test with submitter
-		const { projectId } = await seedAndAuth(request, 'OBSERVER');
+		// Seed MODERATOR to create a link, then test with submitter
+		const { projectId } = await seedAndAuth(request, 'MODERATOR');
 		const createRes = await request.post('/api/invites', {
 			data: { projectId, role: 'SUBMITTER' }
 		});

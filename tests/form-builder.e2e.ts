@@ -1,4 +1,4 @@
-/**
+﻿/**
  * E2E tests for Step 11: form builder API.
  *
  * Tests cover GET/POST /api/projects/[id]/fields and
@@ -20,13 +20,13 @@ function b64url(bytes: Uint8Array): string {
  * Seeds a project + user + membership and authenticates via challenge-response.
  * Returns the authenticated request context and the project ID.
  */
-async function authenticateObserver(request: APIRequestContext) {
-	return authenticateWithRole(request, 'OBSERVER');
+async function authenticateMODERATOR(request: APIRequestContext) {
+	return authenticateWithRole(request, 'MODERATOR');
 }
 
 async function authenticateWithRole(
 	request: APIRequestContext,
-	role: 'OBSERVER' | 'SUBMITTER',
+	role: 'MODERATOR' | 'SUBMITTER',
 	projectId?: string
 ) {
 	const signing = await crypto.subtle.generateKey(
@@ -85,10 +85,10 @@ async function authenticateWithRole(
 // ── tests ──────────────────────────────────────────────────────────────────
 
 test.describe('form builder API', () => {
-	test('observer creates a two-field form; fields are persisted and returned by GET', async ({
+	test('MODERATOR creates a two-field form; fields are persisted and returned by GET', async ({
 		request
 	}) => {
-		const { request: authed, projectId } = await authenticateObserver(request);
+		const { request: authed, projectId } = await authenticateMODERATOR(request);
 
 		// Create first field
 		const r1 = await authed.post(`/api/projects/${projectId}/fields`, {
@@ -121,8 +121,8 @@ test.describe('form builder API', () => {
 		expect(fields[1].label).toBe('Category');
 	});
 
-	test('observer can reorder fields via PATCH', async ({ request }) => {
-		const { request: authed, projectId } = await authenticateObserver(request);
+	test('MODERATOR can reorder fields via PATCH', async ({ request }) => {
+		const { request: authed, projectId } = await authenticateMODERATOR(request);
 
 		const f1 = (
 			await authed.post(`/api/projects/${projectId}/fields`, {
@@ -138,8 +138,8 @@ test.describe('form builder API', () => {
 		expect((await patchRes.json()).field.sortOrder).toBe(5);
 	});
 
-	test('observer can delete a required field (no minimum-field guard)', async ({ request }) => {
-		const { request: authed, projectId } = await authenticateObserver(request);
+	test('MODERATOR can delete a required field (no minimum-field guard)', async ({ request }) => {
+		const { request: authed, projectId } = await authenticateMODERATOR(request);
 
 		const createRes = await authed.post(`/api/projects/${projectId}/fields`, {
 			data: { label: 'Only field', type: 'TEXT', required: true }
@@ -154,19 +154,19 @@ test.describe('form builder API', () => {
 	});
 
 	test('submitter cannot create a field (403)', async ({ request }) => {
-		// Set up project with an observer first (project must exist)
-		const { request: observerReq, projectId } = await authenticateObserver(request);
+		// Set up project with an MODERATOR first (project must exist)
+		const { request: MODERATORReq, projectId } = await authenticateMODERATOR(request);
 
 		// Now authenticate a submitter into the same project
 		const { request: submitterReq } = await authenticateWithRole(
 			// Use a fresh context via a workaround: make a second request context
 			// by passing a new Playwright request bound to the same API base
-			observerReq,
+			MODERATORReq,
 			'SUBMITTER',
 			projectId
 		);
 
-		// The submitter's request context shares the cookie jar with the observer here.
+		// The submitter's request context shares the cookie jar with the MODERATOR here.
 		// Use a separate browser context fixture for isolation — but for API tests we
 		// just need a distinct session. Since `request` fixtures are per-test and share
 		// no cookies, we use a direct API approach with a fresh signing key instead.
@@ -194,7 +194,7 @@ test.describe('form builder API', () => {
 	});
 
 	test('creating a field with empty label returns 400', async ({ request }) => {
-		const { request: authed, projectId } = await authenticateObserver(request);
+		const { request: authed, projectId } = await authenticateMODERATOR(request);
 
 		const r = await authed.post(`/api/projects/${projectId}/fields`, {
 			data: { label: '', type: 'TEXT' }
@@ -204,7 +204,7 @@ test.describe('form builder API', () => {
 	});
 
 	test('creating a field with whitespace-only label returns 400', async ({ request }) => {
-		const { request: authed, projectId } = await authenticateObserver(request);
+		const { request: authed, projectId } = await authenticateMODERATOR(request);
 
 		const r = await authed.post(`/api/projects/${projectId}/fields`, {
 			data: { label: '   ', type: 'TEXT' }
@@ -213,7 +213,7 @@ test.describe('form builder API', () => {
 	});
 
 	test('creating a SELECT field with no options returns 400', async ({ request }) => {
-		const { request: authed, projectId } = await authenticateObserver(request);
+		const { request: authed, projectId } = await authenticateMODERATOR(request);
 
 		const r = await authed.post(`/api/projects/${projectId}/fields`, {
 			data: { label: 'Category', type: 'SELECT', options: [] }
@@ -223,7 +223,7 @@ test.describe('form builder API', () => {
 	});
 
 	test('GET fields returns them ordered by sortOrder', async ({ request }) => {
-		const { request: authed, projectId } = await authenticateObserver(request);
+		const { request: authed, projectId } = await authenticateMODERATOR(request);
 
 		await authed.post(`/api/projects/${projectId}/fields`, {
 			data: { label: 'Third', type: 'TEXT', sortOrder: 2 }

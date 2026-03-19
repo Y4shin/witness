@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -22,7 +22,7 @@
 	import { api, ApiError } from '$lib/client/api';
 
 	type Mode = 'loading' | 'register' | 'submitting' | 'login' | 'error';
-	type Role = 'SUBMITTER' | 'OBSERVER';
+	type Role = 'SUBMITTER' | 'MODERATOR';
 
 	let mode = $state<Mode>('loading');
 	let formError = $state('');
@@ -75,27 +75,27 @@
 			const bundle = await generateUserKeyBundle();
 			const jwks = await exportUserKeyBundleJwk(bundle);
 
-			// ── Determine if this is the first observer (project has no key yet) ──
+			// ── Determine if this is the first MODERATOR (project has no key yet) ──
 			let projectPublicKey: CryptoKey;
 			let encryptedProjectPrivateKey: string | null = null;
 			// Held for upload after authentication (PATCH requires an active session)
 			let pendingProjectPublicKeyJwk: string | null = null;
 
-			if (role === 'OBSERVER') {
+			if (role === 'MODERATOR') {
 				let existingKeyStr: string | null = null;
 				try {
 					const resp = await api.projects.getPublicKey(projectId);
 					existingKeyStr = resp.publicKey;
 				} catch (err) {
 					if (!(err instanceof ApiError && err.status === 404)) throw err;
-					// 404 means no key yet — this is the first observer
+					// 404 means no key yet — this is the first MODERATOR
 				}
 
 				if (existingKeyStr) {
-					// Subsequent observer: project key already exists
+					// Subsequent MODERATOR: project key already exists
 					projectPublicKey = await importEcdhPublicKey(stringToJwk(existingKeyStr));
 				} else {
-					// First observer: generate the project keypair
+					// First MODERATOR: generate the project keypair
 					statusMessage = 'Generating project keys…';
 					const projectKeyPair = await generateProjectKeyPair();
 					const projectPubJwk = await exportPublicKeyJwk(projectKeyPair.publicKey);

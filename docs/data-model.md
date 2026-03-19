@@ -1,4 +1,4 @@
-# Data Model
+﻿# Data Model
 
 Database: **SQLite** via `better-sqlite3`. Migrations are plain numbered `.sql` files in `migrations/`, applied at server startup.
 
@@ -31,8 +31,8 @@ CREATE TABLE users (
 CREATE TABLE memberships (
   user_id                      TEXT NOT NULL REFERENCES users(id),
   project_id                   TEXT NOT NULL REFERENCES projects(id),
-  role                         TEXT NOT NULL CHECK (role IN ('SUBMITTER', 'OBSERVER')),
-  encrypted_project_private_key TEXT,    -- Non-null for OBSERVERs only. Encrypted with user's public key.
+  role                         TEXT NOT NULL CHECK (role IN ('SUBMITTER', 'MODERATOR')),
+  encrypted_project_private_key TEXT,    -- Non-null for MODERATORs only. Encrypted with user's public key.
   joined_at                    INTEGER NOT NULL,
   PRIMARY KEY (user_id, project_id)
 );
@@ -66,7 +66,7 @@ CREATE TABLE invite_links (
   project_id        TEXT NOT NULL REFERENCES projects(id),
   created_by        TEXT REFERENCES users(id), -- NULL for admin-generated links
   creator_signature TEXT,               -- Signature over (token + project_id + role + expires_at)
-  role              TEXT NOT NULL CHECK (role IN ('SUBMITTER', 'OBSERVER')),
+  role              TEXT NOT NULL CHECK (role IN ('SUBMITTER', 'MODERATOR')),
   max_uses          INTEGER,             -- NULL = unlimited
   used_count        INTEGER NOT NULL DEFAULT 0,
   expires_at        INTEGER,             -- NULL = no expiry

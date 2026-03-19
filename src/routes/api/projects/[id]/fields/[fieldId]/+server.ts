@@ -4,12 +4,12 @@ import { db } from '$lib/server/db';
 import { logger } from '$lib/server/logger';
 import type { PatchFieldResponse } from '$lib/api-types';
 
-async function requireObserver(userId: string, projectId: string) {
+async function requireModerator(userId: string, projectId: string) {
 	const membership = await db.membership.findUnique({
 		where: { userId_projectId: { userId, projectId } }
 	});
 	if (!membership) throw error(403, 'Not a member of this project');
-	if (membership.role !== 'OBSERVER') throw error(403, 'Observer role required');
+	if (membership.role !== 'MODERATOR') throw error(403, 'Moderator role required');
 }
 
 async function getField(fieldId: string, projectId: string) {
@@ -20,11 +20,11 @@ async function getField(fieldId: string, projectId: string) {
 
 /**
  * PATCH /api/projects/[id]/fields/[fieldId]
- * Updates the sortOrder of a field. Requires OBSERVER role.
+ * Updates the sortOrder of a field. Requires MODERATOR role.
  */
 export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 	if (!locals.user) throw error(401, 'Authentication required');
-	await requireObserver(locals.user.id, params.id!);
+	await requireModerator(locals.user.id, params.id!);
 
 	let body: unknown;
 	try {
@@ -53,11 +53,11 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 
 /**
  * DELETE /api/projects/[id]/fields/[fieldId]
- * Deletes a field. Requires OBSERVER role. No minimum-field guard.
+ * Deletes a field. Requires MODERATOR role. No minimum-field guard.
  */
 export const DELETE: RequestHandler = async ({ params, locals }) => {
 	if (!locals.user) throw error(401, 'Authentication required');
-	await requireObserver(locals.user.id, params.id!);
+	await requireModerator(locals.user.id, params.id!);
 	await getField(params.fieldId!, params.id!);
 
 	await db.formField.delete({ where: { id: params.fieldId } });

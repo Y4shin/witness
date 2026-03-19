@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import { api, ApiError } from '$lib/client/api';
 	import QrCode from './QrCode.svelte';
 	import type { InviteLinkRecord } from '$lib/api-types';
@@ -6,7 +6,7 @@
 	let { projectId }: { projectId: string } = $props();
 
 	// ── form state ──────────────────────────────────────────────────────────
-	let role = $state<'SUBMITTER' | 'OBSERVER'>('SUBMITTER');
+	let role = $state<'SUBMITTER' | 'MODERATOR'>('SUBMITTER');
 	let maxUsesStr = $state('');
 	let expiresAtStr = $state('');
 	let creating = $state(false);
@@ -95,7 +95,7 @@
 						aria-label="Role"
 					>
 						<option value="SUBMITTER">Submitter</option>
-						<option value="OBSERVER">Observer</option>
+						<option value="MODERATOR">Moderator</option>
 					</select>
 				</label>
 

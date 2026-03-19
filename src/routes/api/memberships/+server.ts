@@ -1,4 +1,4 @@
-import { json, error } from '@sveltejs/kit';
+﻿import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { logger } from '$lib/server/logger';
@@ -12,7 +12,7 @@ import type { JoinProjectRequest, JoinProjectResponse } from '$lib/api-types';
  *
  * Body:
  *   - inviteToken: string — the invite token from the /invite/[token] redirect
- *   - encryptedProjectPrivateKey?: string — required for the first OBSERVER to
+ *   - encryptedProjectPrivateKey?: string — required for the first MODERATOR to
  *     set up the project's encrypted private key in their membership record
  */
 export const POST: RequestHandler = async ({ request, locals }) => {

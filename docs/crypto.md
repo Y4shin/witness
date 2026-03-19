@@ -1,4 +1,4 @@
-# Cryptographic Design
+﻿# Cryptographic Design
 
 All cryptographic operations use the browser's built-in **Web Crypto API**. No third-party crypto library is used.
 
@@ -22,9 +22,9 @@ All cryptographic operations use the browser's built-in **Web Crypto API**. No t
 - **Public key**: uploaded to server during registration, stored in plaintext in the `users` table.
 
 ### Project keypair
-- Generated client-side by the **first observer** when claiming the initial invite link.
+- Generated client-side by the **first MODERATOR** when claiming the initial invite link.
 - **Public key**: uploaded to server, stored in plaintext in the `projects` table.
-- **Private key**: never stored in plaintext on the server. Stored only as `encryptedProjectPrivateKey` in the `memberships` table, encrypted with each observer's public key.
+- **Private key**: never stored in plaintext on the server. Stored only as `encryptedProjectPrivateKey` in the `memberships` table, encrypted with each MODERATOR's public key.
 
 ### IndexedDB cold storage key
 - Derived from user private key using HKDF.
@@ -54,7 +54,7 @@ All cryptographic operations use the browser's built-in **Web Crypto API**. No t
 3. Decrypt encryptedPayload with K_sym → plaintext.
 ```
 
-### Reading a submission (observer)
+### Reading a submission (MODERATOR)
 
 ```
 1. Fetch encryptedProjectPrivateKey from memberships table.
@@ -73,14 +73,14 @@ All cryptographic operations use the browser's built-in **Web Crypto API**. No t
 5. Server stores public key in plaintext; contact info stays encrypted.
 ```
 
-### Observer promotion
+### MODERATOR promotion
 
 ```
-1. Promoting observer fetches their encryptedProjectPrivateKey.
+1. Promoting MODERATOR fetches their encryptedProjectPrivateKey.
 2. Decrypts it with own private key → project private key (in memory only).
-3. Fetches new observer's public key from server.
-4. Encrypts project private key with new observer's public key.
-5. POSTs the new encryptedProjectPrivateKey for the new observer.
+3. Fetches new MODERATOR's public key from server.
+4. Encrypts project private key with new MODERATOR's public key.
+5. POSTs the new encryptedProjectPrivateKey for the new MODERATOR.
 6. Server updates membership row. In-memory project private key is discarded.
 ```
 
@@ -98,7 +98,7 @@ Import:
 1. Decode base64 → extract salt, IV, encryptedBundle.
 2. Re-derive K_wrap from passphrase + salt.
 3. Decrypt → private key restored to localStorage.
-4. Re-fetch observer memberships from server.
+4. Re-fetch MODERATOR memberships from server.
 ```
 
 ## Submission Authenticity
@@ -115,7 +115,7 @@ Each submission includes a **signature** over `nonce || SHA-256(encryptedPayload
 | Submission content | AES-GCM ciphertext | No |
 | Symmetric key (project copy) | RSA/ECDH ciphertext | No |
 | Symmetric key (user copy) | RSA/ECDH ciphertext | No |
-| Project private key | RSA/ECDH ciphertext (per observer) | No |
+| Project private key | RSA/ECDH ciphertext (per MODERATOR) | No |
 | User contact info | RSA/ECDH ciphertext | No |
 | User public key | Plaintext | Yes (it's public) |
 | Project public key | Plaintext | Yes (it's public) |

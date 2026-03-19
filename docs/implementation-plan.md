@@ -1,4 +1,4 @@
-# Implementation Plan
+﻿# Implementation Plan
 
 Steps are ordered by dependency. Each step should be fully working and tested before moving to the next.
 
@@ -170,7 +170,7 @@ logger.info(`User ${userId} joined project ${projectId}`)
 ### Step 7: Infrastructure admin console
 - Protect `/admin` with env-level password (server-side only, independent of user sessions)
 - Create / delete projects
-- Display one-time observer invite link + QR code after project creation
+- Display one-time MODERATOR invite link + QR code after project creation
 - Log admin actions via `logger`
 
 **Tests — happy path:**
@@ -184,7 +184,7 @@ logger.info(`User ${userId} joined project ${projectId}`)
 ## Phase 3 — Projects & Invites
 
 ### Step 8: Invite link system
-- `POST /api/invites` — create invite link signed by observer (or unsigned for admin)
+- `POST /api/invites` — create invite link signed by MODERATOR (or unsigned for admin)
 - `GET /api/invites/[token]` — validate token, return project info
 - Increment `used_count` on claim; reject if over limit or expired
 - Log invite creation, claims, and rejections via `logger`
@@ -199,12 +199,12 @@ logger.info(`User ${userId} joined project ${projectId}`)
 
 ---
 
-### Step 9: Project keypair genesis (first observer claim)
-- First observer claiming link: generate project keypair client-side, POST public key, store encrypted private key in `memberships`
+### Step 9: Project keypair genesis (first MODERATOR claim)
+- First MODERATOR claiming link: generate project keypair client-side, POST public key, store encrypted private key in `memberships`
 - Subsequent users claiming a link: skip keypair generation, just register
 
 **Tests — happy path:**
-- Playwright: first observer claim stores a project public key on the server; observer can decrypt their `encryptedProjectPrivateKey` using their own private key
+- Playwright: first MODERATOR claim stores a project public key on the server; MODERATOR can decrypt their `encryptedProjectPrivateKey` using their own private key
 
 **Tests — non-happy path:**
 - Playwright: second user claiming a link cannot overwrite the project public key (`PATCH` endpoint rejects if key already set — 409); a submitter-role invite link does not trigger keypair genesis even if the project has no public key yet (error shown, operation aborted)
@@ -225,13 +225,13 @@ logger.info(`User ${userId} joined project ${projectId}`)
 
 ## Phase 4 — Submissions
 
-### Step 11: Form builder (observer)
+### Step 11: Form builder (MODERATOR)
 - UI to add/remove/reorder TEXT, SELECT, FILE fields
 - `POST /api/projects/[id]/fields`, `GET /api/projects/[id]/fields`
 
 **Tests — happy path:**
 - Vitest (component): adding a TEXT field appears in the list; SELECT field shows options input; reordering updates `sortOrder`
-- Playwright: observer creates a two-field form; fields are persisted and returned by the API
+- Playwright: MODERATOR creates a two-field form; fields are persisted and returned by the API
 
 **Tests — non-happy path:**
 - Vitest (component): submitting a SELECT field with no options shows a validation error
@@ -258,40 +258,40 @@ logger.info(`User ${userId} joined project ${projectId}`)
 
 ### Step 13: Submission views
 - Submitter: fetch own submissions, decrypt with own key
-- Observer: fetch all submissions, decrypt via project private key, display contact info
+- MODERATOR: fetch all submissions, decrypt via project private key, display contact info
 
 **Tests — happy path:**
-- Playwright: submitter sees their own submission decrypted; observer sees all submissions; observer can decrypt contact info; decrypted values match what was submitted
+- Playwright: submitter sees their own submission decrypted; MODERATOR sees all submissions; MODERATOR can decrypt contact info; decrypted values match what was submitted
 
 **Tests — non-happy path:**
-- Playwright: submitter requesting another user's submission returns 403; unauthenticated request to submissions API returns 401; submitter cannot access the observer view route (redirected or shown 403); if decryption fails (e.g. corrupted key in storage), the UI shows a clear decryption error rather than crashing or showing empty fields silently
+- Playwright: submitter requesting another user's submission returns 403; unauthenticated request to submissions API returns 401; submitter cannot access the MODERATOR view route (redirected or shown 403); if decryption fails (e.g. corrupted key in storage), the UI shows a clear decryption error rather than crashing or showing empty fields silently
 
 ---
 
-## Phase 5 — Observer Features
+## Phase 5 — MODERATOR Features
 
-### Step 14: Observer promotion
-- Observer promotes submitter; client decrypts project private key, re-encrypts for new observer, POSTs
+### Step 14: MODERATOR promotion
+- MODERATOR promotes submitter; client decrypts project private key, re-encrypts for new MODERATOR, POSTs
 - Log promotion events via `logger`
 
 **Tests — happy path:**
 - Playwright: promoted user can decrypt `encryptedProjectPrivateKey` with own private key; promoted user can view all submissions
 
 **Tests — non-happy path:**
-- Playwright: submitter attempting to promote another user returns 403; observer attempting to demote another observer is blocked (no demotion endpoint — 404/405); promoting a user who is already an observer returns 409; promoting a user from a different project returns 404
+- Playwright: submitter attempting to promote another user returns 403; MODERATOR attempting to demote another MODERATOR is blocked (no demotion endpoint — 404/405); promoting a user who is already an MODERATOR returns 409; promoting a user from a different project returns 404
 
 ---
 
 ### Step 15: Invite link management UI
-- Observers generate submitter/observer invite links with expiry / max-uses
+- MODERATORs generate submitter/MODERATOR invite links with expiry / max-uses
 - List and revoke active links; display as link + QR code
 
 **Tests — happy path:**
 - Vitest (component): invite form renders role selector and optional expiry/max-uses fields
-- Playwright: observer creates an observer invite link; new user claims it and is promoted to observer
+- Playwright: MODERATOR creates an MODERATOR invite link; new user claims it and is promoted to MODERATOR
 
 **Tests — non-happy path:**
-- Playwright: submitter attempting to create an invite link returns 403; revoking a link makes subsequent claims return 410; setting `max_uses=1` and claiming twice — second claim is rejected; creating a link with an expiry in the past returns 400; a non-observer cannot see the invite management UI (route guard)
+- Playwright: submitter attempting to create an invite link returns 403; revoking a link makes subsequent claims return 410; setting `max_uses=1` and claiming twice — second claim is rejected; creating a link with an expiry in the past returns 400; a non-MODERATOR cannot see the invite management UI (route guard)
 
 ---
 
@@ -377,7 +377,7 @@ logger.info(`User ${userId} joined project ${projectId}`)
 - Create `docs/deployment.md`
 
 **Tests:**
-- Playwright (smoke — runs against production build): admin creates project → observer claims link → submitter registers and submits → observer views decrypted submission → all log lines emitted contain `level`, `time`, and `msg` fields (structured log assertion)
+- Playwright (smoke — runs against production build): admin creates project → MODERATOR claims link → submitter registers and submits → MODERATOR views decrypted submission → all log lines emitted contain `level`, `time`, and `msg` fields (structured log assertion)
 - Playwright: start server with `OTEL_ENABLED=false` — no connection attempts to any OTLP endpoint; start with `OTEL_ENABLED=true` and a mock collector — traces and logs arrive at the collector
 
 ---
@@ -385,7 +385,7 @@ logger.info(`User ${userId} joined project ${projectId}`)
 ## Deferred / Optional
 
 - File size limits and server-side validation of encrypted blob sizes
-- Submission comments / observer questions (encrypted comment thread per submission)
+- Submission comments / MODERATOR questions (encrypted comment thread per submission)
 - Email notifications (contact info is stored; sending is a separate integration)
 - Rate limiting on auth and submission endpoints
-- Audit log for observer actions (promotions, link creation, revocations)
+- Audit log for MODERATOR actions (promotions, link creation, revocations)

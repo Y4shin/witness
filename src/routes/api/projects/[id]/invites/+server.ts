@@ -7,7 +7,7 @@ import type { GetProjectInvitesResponse } from '$lib/api-types';
  * GET /api/projects/[id]/invites
  *
  * Returns all active (not fully-used) invite links for the project.
- * Requires OBSERVER role.
+ * Requires MODERATOR role.
  */
 export const GET: RequestHandler = async ({ params, locals }) => {
 	if (!locals.user) throw error(401, 'Authentication required');
@@ -18,7 +18,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		where: { userId_projectId: { userId: locals.user.id, projectId } }
 	});
 	if (!membership) throw error(403, 'Not a member of this project');
-	if (membership.role !== 'OBSERVER') throw error(403, 'Only observers can view invite links');
+	if (membership.role !== 'MODERATOR') throw error(403, 'Only moderators can view invite links');
 
 	const invites = await db.inviteLink.findMany({
 		where: { projectId },
@@ -29,7 +29,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		invites: invites.map((i) => ({
 			id: i.id,
 			token: i.token,
-			role: i.role as 'SUBMITTER' | 'OBSERVER',
+			role: i.role as 'SUBMITTER' | 'MODERATOR',
 			maxUses: i.maxUses,
 			usedCount: i.usedCount,
 			expiresAt: i.expiresAt ? i.expiresAt.toISOString() : null,

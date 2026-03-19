@@ -9,7 +9,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		where: { userId_projectId: { userId: locals.user.id, projectId: params.id } }
 	});
 	if (!membership) throw error(403, 'Not a member of this project');
-	if (membership.role !== 'OBSERVER') throw error(403, 'Observer access required');
+	if (membership.role !== 'MODERATOR') throw error(403, 'Moderator access required');
 
 	const fields = await db.formField.findMany({
 		where: { projectId: params.id },

@@ -24,7 +24,7 @@ export const GET: RequestHandler = async ({ params }) => {
 
 /**
  * DELETE /api/invites/[token]
- * Revokes an invite link. Requires OBSERVER role in the linked project.
+ * Revokes an invite link. Requires MODERATOR role in the linked project.
  */
 export const DELETE: RequestHandler = async ({ params, locals }) => {
 	if (!locals.user) throw error(401, 'Authentication required');
@@ -32,12 +32,12 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 	const invite = await db.inviteLink.findUnique({ where: { token: params.token } });
 	if (!invite) throw error(404, 'Invite link not found');
 
-	// Caller must be an observer in the linked project
+	// Caller must be an moderator in the linked project
 	const membership = await db.membership.findUnique({
 		where: { userId_projectId: { userId: locals.user.id, projectId: invite.projectId } }
 	});
-	if (!membership || membership.role !== 'OBSERVER') {
-		throw error(403, 'Only observers can revoke invite links');
+	if (!membership || membership.role !== 'MODERATOR') {
+		throw error(403, 'Only moderators can revoke invite links');
 	}
 
 	await db.inviteLink.delete({ where: { token: params.token } });

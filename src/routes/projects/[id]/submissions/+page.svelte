@@ -36,9 +36,9 @@
 		try {
 			const userBundle = await importUserKeyBundleJwk(stored);
 
-			// Observer: decrypt the project private key first
+			// Moderator: decrypt the project private key first
 			let projectPrivateKey: CryptoKey | null = null;
-			if (data.role === 'OBSERVER' && data.encryptedProjectPrivateKey) {
+			if (data.role === 'MODERATOR' && data.encryptedProjectPrivateKey) {
 				const encProjKey = JSON.parse(data.encryptedProjectPrivateKey) as {
 					payload: string;
 					key: EncryptedKey;
@@ -54,7 +54,7 @@
 				raw.map(async (s) => {
 					try {
 						let symKey: CryptoKey;
-						if (data.role === 'OBSERVER' && projectPrivateKey) {
+						if (data.role === 'MODERATOR' && projectPrivateKey) {
 							const encKeyProject = JSON.parse(s.encryptedKeyProject) as EncryptedKey;
 							symKey = await decryptSymmetricKey(encKeyProject, projectPrivateKey);
 						} else {

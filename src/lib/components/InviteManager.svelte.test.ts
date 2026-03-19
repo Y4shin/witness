@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 import InviteManager from './InviteManager.svelte';
@@ -36,7 +36,7 @@ const mockInvites = [
 	{
 		id: 'inv-2',
 		token: 'tok-xyz',
-		role: 'OBSERVER',
+		role: 'MODERATOR',
 		maxUses: null,
 		usedCount: 0,
 		expiresAt: null,
@@ -52,13 +52,13 @@ beforeEach(() => {
 describe('InviteManager', () => {
 	// ── happy path ───────────────────────────────────────────────────────────
 
-	it('renders role selector with SUBMITTER and OBSERVER options', async () => {
+	it('renders role selector with SUBMITTER and MODERATOR options', async () => {
 		render(InviteManager, { projectId: 'proj-1' });
 		await expect.element(page.getByRole('combobox', { name: 'Role' })).toBeVisible();
 		const select = page.getByRole('combobox', { name: 'Role' }).element() as HTMLSelectElement;
 		const options = Array.from(select.options).map((o) => o.value);
 		expect(options).toContain('SUBMITTER');
-		expect(options).toContain('OBSERVER');
+		expect(options).toContain('MODERATOR');
 	});
 
 	it('renders max uses input', async () => {
@@ -98,13 +98,13 @@ describe('InviteManager', () => {
 
 		render(InviteManager, { projectId: 'proj-1' });
 
-		// Switch to OBSERVER
-		await page.getByLabelText('Role').selectOptions('OBSERVER');
+		// Switch to MODERATOR
+		await page.getByLabelText('Role').selectOptions('MODERATOR');
 		await page.getByRole('button', { name: 'Create invite link' }).click();
 
 		await expect.poll(() => (api.invites.create as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0);
 		expect(api.invites.create).toHaveBeenCalledWith(
-			expect.objectContaining({ role: 'OBSERVER', projectId: 'proj-1' })
+			expect.objectContaining({ role: 'MODERATOR', projectId: 'proj-1' })
 		);
 	});
 

@@ -1,10 +1,10 @@
-/**
- * E2E tests for Step 14: observer promotion.
+﻿/**
+ * E2E tests for Step 14: MODERATOR promotion.
  *
  * Tests cover POST /api/projects/[id]/promote:
  *  - happy path: submitter promoted; can then decrypt project key (verified by accessing submissions)
  *  - submitter attempting to promote returns 403
- *  - observer attempting to promote an already-observer returns 409
+ *  - MODERATOR attempting to promote an already-MODERATOR returns 409
  *  - promoting a user from a different project returns 404
  *  - unauthenticated returns 401
  */
@@ -77,7 +77,7 @@ async function buildEncryptedProjectPrivateKey(projectPrivateKey: CryptoKey, use
 
 async function seedAndAuth(
 	request: APIRequestContext,
-	role: 'SUBMITTER' | 'OBSERVER',
+	role: 'SUBMITTER' | 'MODERATOR',
 	existingProjectId?: string,
 	existingProjectPublicKey?: string,
 	existingProjectPrivateKey?: CryptoKey
@@ -107,7 +107,7 @@ async function seedAndAuth(
 	}
 
 	let encryptedProjectPrivateKey: string | undefined;
-	if (role === 'OBSERVER' && projectPrivateKey) {
+	if (role === 'MODERATOR' && projectPrivateKey) {
 		encryptedProjectPrivateKey = await buildEncryptedProjectPrivateKey(projectPrivateKey, keys.encryptionPublicKey);
 	}
 
@@ -177,10 +177,10 @@ async function decryptProjectPrivateKey(
 
 // ── tests ──────────────────────────────────────────────────────────────────
 
-test.describe('observer promotion', () => {
-	test('observer can promote a submitter; promoted user gets an encryptedProjectPrivateKey', async ({ request }) => {
-		// Set up observer (creates project)
-		const { keys: obsKeys, projectId, projectPublicKey, projectPrivateKey } = await seedAndAuth(request, 'OBSERVER');
+test.describe('MODERATOR promotion', () => {
+	test('MODERATOR can promote a submitter; promoted user gets an encryptedProjectPrivateKey', async ({ request }) => {
+		// Set up MODERATOR (creates project)
+		const { keys: obsKeys, projectId, projectPublicKey, projectPrivateKey } = await seedAndAuth(request, 'MODERATOR');
 
 		// Seed a submitter
 		const subKeys = await generateUserKeys();
@@ -192,8 +192,8 @@ test.describe('observer promotion', () => {
 			data: { type: 'membership', userId: subUserId, projectId, role: 'SUBMITTER' }
 		});
 
-		// Re-authenticate as observer (seeding resets nothing, but let's confirm session is still observer's)
-		// Observer POSTs promote
+		// Re-authenticate as MODERATOR (seeding resets nothing, but let's confirm session is still MODERATOR's)
+		// MODERATOR POSTs promote
 		const encProjPrivKey = await reEncryptProjectKey(projectPrivateKey!, subKeys.encryptionPublicKey);
 		const res = await request.post(`/api/projects/${projectId}/promote`, {
 			data: { targetUserId: subUserId, encryptedProjectPrivateKey: encProjPrivKey }
@@ -202,7 +202,7 @@ test.describe('observer promotion', () => {
 		expect((await res.json()).ok).toBe(true);
 
 		// Verify: submitter can now decrypt the project private key
-		// Re-authenticate as submitter (who is now observer)
+		// Re-authenticate as submitter (who is now MODERATOR)
 		await reAuth(request, subKeys.signingPublicKey, subKeys.signing.privateKey);
 
 		// Fetch their membership to get encryptedProjectPrivateKey
@@ -210,15 +210,15 @@ test.describe('observer promotion', () => {
 		expect(membersRes.status()).toBe(200);
 		const { members } = await membersRes.json();
 		const promotedMember = members.find((m: { userId: string }) => m.userId === subUserId);
-		expect(promotedMember.role).toBe('OBSERVER');
+		expect(promotedMember.role).toBe('MODERATOR');
 
-		// Re-auth as observer again to verify encryptedProjectPrivateKey is accessible via server load
-		// (we check by calling GET /api/projects/[id]/submissions as the promoted observer, seeding a submission first)
+		// Re-auth as MODERATOR again to verify encryptedProjectPrivateKey is accessible via server load
+		// (we check by calling GET /api/projects/[id]/submissions as the promoted MODERATOR, seeding a submission first)
 		await request.post('/api/_test/seed', {
 			data: { type: 'submission', projectId, userId: subUserId, encryptedKeyProject: '{}', encryptedPayload: 'x', encryptedKeyUser: '{}', submitterSignature: 'sig' }
 		});
 
-		// Re-auth as observer (original) and check submissions count
+		// Re-auth as MODERATOR (original) and check submissions count
 		await reAuth(request, obsKeys.signingPublicKey, obsKeys.signing.privateKey);
 		const subRes = await request.get(`/api/projects/${projectId}/submissions`);
 		expect(subRes.status()).toBe(200);
@@ -230,8 +230,8 @@ test.describe('observer promotion', () => {
 	});
 
 	test('promoted user can decrypt project private key with their own key', async ({ request }) => {
-		// Set up observer
-		const { keys: obsKeys, projectId, projectPrivateKey } = await seedAndAuth(request, 'OBSERVER');
+		// Set up MODERATOR
+		const { keys: obsKeys, projectId, projectPrivateKey } = await seedAndAuth(request, 'MODERATOR');
 
 		// Seed submitter
 		const subKeys = await generateUserKeys();
@@ -243,7 +243,7 @@ test.describe('observer promotion', () => {
 			data: { type: 'membership', userId: subUserId, projectId, role: 'SUBMITTER' }
 		});
 
-		// Re-auth as observer and promote
+		// Re-auth as MODERATOR and promote
 		await reAuth(request, obsKeys.signingPublicKey, obsKeys.signing.privateKey);
 		const encProjPrivKey = await reEncryptProjectKey(projectPrivateKey!, subKeys.encryptionPublicKey);
 		const promoteRes = await request.post(`/api/projects/${projectId}/promote`, {
@@ -258,7 +258,7 @@ test.describe('observer promotion', () => {
 		const membersRes = await request.get(`/api/projects/${projectId}/members`);
 		const { members } = await membersRes.json();
 		const me = members.find((m: { userId: string }) => m.userId === subUserId);
-		expect(me.role).toBe('OBSERVER');
+		expect(me.role).toBe('MODERATOR');
 
 		// Simulate decrypting the encryptedProjectPrivateKey received via the promotion
 		const recovered = await decryptProjectPrivateKey(encProjPrivKey, subKeys.encryption.privateKey);
@@ -279,10 +279,10 @@ test.describe('observer promotion', () => {
 		expect((await res.json()).message).toBeTruthy();
 	});
 
-	test('promoting an already-observer returns 409', async ({ request }) => {
-		const { keys: obsKeys, projectId, projectPrivateKey } = await seedAndAuth(request, 'OBSERVER');
+	test('promoting an already-MODERATOR returns 409', async ({ request }) => {
+		const { keys: obsKeys, projectId, projectPrivateKey } = await seedAndAuth(request, 'MODERATOR');
 
-		// Seed a second observer
+		// Seed a second MODERATOR
 		const obs2Keys = await generateUserKeys();
 		const obs2Res = await request.post('/api/_test/seed', {
 			data: { type: 'user', signingPublicKey: obs2Keys.signingPublicKey, encryptionPublicKey: obs2Keys.encryptionPublicKey }
@@ -290,13 +290,13 @@ test.describe('observer promotion', () => {
 		const { userId: obs2Id } = await obs2Res.json();
 		const encProjPrivKey2 = await buildEncryptedProjectPrivateKey(projectPrivateKey!, obs2Keys.encryptionPublicKey);
 		await request.post('/api/_test/seed', {
-			data: { type: 'membership', userId: obs2Id, projectId, role: 'OBSERVER', encryptedProjectPrivateKey: encProjPrivKey2 }
+			data: { type: 'membership', userId: obs2Id, projectId, role: 'MODERATOR', encryptedProjectPrivateKey: encProjPrivKey2 }
 		});
 
-		// Re-auth as first observer
+		// Re-auth as first MODERATOR
 		await reAuth(request, obsKeys.signingPublicKey, obsKeys.signing.privateKey);
 
-		// Try to promote the second observer
+		// Try to promote the second MODERATOR
 		const res = await request.post(`/api/projects/${projectId}/promote`, {
 			data: { targetUserId: obs2Id, encryptedProjectPrivateKey: '{}' }
 		});
@@ -305,7 +305,7 @@ test.describe('observer promotion', () => {
 	});
 
 	test('promoting a user not in the project returns 404', async ({ request }) => {
-		const { keys: obsKeys, projectId } = await seedAndAuth(request, 'OBSERVER');
+		const { keys: obsKeys, projectId } = await seedAndAuth(request, 'MODERATOR');
 		await reAuth(request, obsKeys.signingPublicKey, obsKeys.signing.privateKey);
 
 		const res = await request.post(`/api/projects/${projectId}/promote`, {

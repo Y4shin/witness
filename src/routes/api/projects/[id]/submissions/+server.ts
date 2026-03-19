@@ -8,7 +8,7 @@ import type { GetSubmissionsResponse } from '$lib/api-types';
  * GET /api/projects/[id]/submissions
  *
  * Returns submissions for the project.
- * - OBSERVER: all submissions
+ * - MODERATOR: all submissions
  * - SUBMITTER: only their own submissions
  */
 export const GET: RequestHandler = async ({ params, locals }) => {
@@ -22,7 +22,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	if (!membership) throw error(403, 'Not a member of this project');
 
 	const where =
-		membership.role === 'OBSERVER'
+		membership.role === 'MODERATOR'
 			? { projectId }
 			: { projectId, userId: locals.user.id };
 

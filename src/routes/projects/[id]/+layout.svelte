@@ -8,19 +8,20 @@
 
 	type Tab = { href: string; label: string };
 
-	const tabs = $derived<Tab[]>([
-		...(data.role === 'SUBMITTER'
+	const tabs = $derived<Tab[]>(
+		data.role === 'SUBMITTER'
 			? [
 					{ href: `${base}/submit`, label: 'Submit' },
 					{ href: `${base}/submissions`, label: 'My submissions' }
 				]
 			: [
+					{ href: `${base}/submit`, label: 'Submit' },
 					{ href: `${base}/submissions`, label: 'Submissions' },
 					{ href: `${base}/members`, label: 'Members' },
 					{ href: `${base}/invite-links`, label: 'Invite links' },
 					{ href: `${base}/fields`, label: 'Form fields' }
-				])
-	]);
+				]
+	);
 </script>
 
 <div class="min-h-screen">

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 
 // ── crypto helpers ─────────────────────────────────────────────────────────
 
@@ -19,7 +19,7 @@ async function generateProjectKeyPair() {
 async function seedProjectWithInvite(
 	request: import('@playwright/test').APIRequestContext,
 	projectName: string,
-	role: 'SUBMITTER' | 'OBSERVER' = 'SUBMITTER'
+	role: 'SUBMITTER' | 'MODERATOR' = 'SUBMITTER'
 ) {
 	const project = await generateProjectKeyPair();
 	const seedRes = await request.post('/api/_test/seed', {

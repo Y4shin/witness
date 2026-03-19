@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import type { PageData, ActionData } from './$types';
 	import QrCode from '$lib/components/QrCode.svelte';
 
@@ -45,7 +45,7 @@
 						<p class="font-semibold text-success">
 							Project <span class="font-mono">{form.created.name}</span> created.
 						</p>
-						<p class="text-sm">Share this one-time observer invite link:</p>
+						<p class="text-sm">Share this one-time MODERATOR invite link:</p>
 						<div class="flex items-center gap-2">
 							<code
 								data-testid="invite-link"

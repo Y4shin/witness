@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Shared request/response shapes for all API endpoints.
  *
  * Server handlers use `satisfies` against these types so TypeScript catches
@@ -60,13 +60,13 @@ export interface SetProjectPublicKeyRequest {
 export interface JoinProjectRequest {
 	inviteToken: string;
 	/** ECDH private key encrypted with the user's own ECDH public key.
-	 *  Required for the first observer to initialise the project keypair. */
+	 *  Required for the first MODERATOR to initialise the project keypair. */
 	encryptedProjectPrivateKey?: string | null;
 }
 
 export interface JoinProjectResponse {
 	projectId: string;
-	role: 'SUBMITTER' | 'OBSERVER';
+	role: 'SUBMITTER' | 'MODERATOR';
 }
 
 // ── GET /api/invites/[token] ───────────────────────────────────────────────
@@ -74,14 +74,14 @@ export interface JoinProjectResponse {
 export interface InviteInfoResponse {
 	projectId: string;
 	projectName: string;
-	role: 'SUBMITTER' | 'OBSERVER';
+	role: 'SUBMITTER' | 'MODERATOR';
 }
 
 // ── POST /api/invites ──────────────────────────────────────────────────────
 
 export interface CreateInviteRequest {
 	projectId: string;
-	role: 'SUBMITTER' | 'OBSERVER';
+	role: 'SUBMITTER' | 'MODERATOR';
 	maxUses?: number | null;
 	expiresAt?: string | null; // ISO-8601 date string
 }
@@ -165,7 +165,7 @@ export interface PatchFieldResponse {
 export interface InviteLinkRecord {
 	id: string;
 	token: string;
-	role: 'SUBMITTER' | 'OBSERVER';
+	role: 'SUBMITTER' | 'MODERATOR';
 	maxUses: number | null;
 	usedCount: number;
 	expiresAt: string | null; // ISO-8601
@@ -186,8 +186,8 @@ export interface RevokeInviteResponse {
 
 export interface MemberRecord {
 	userId: string;
-	role: 'SUBMITTER' | 'OBSERVER';
-	encryptionPublicKey: string; // JWK string — used by observers to re-encrypt project key
+	role: 'SUBMITTER' | 'MODERATOR';
+	encryptionPublicKey: string; // JWK string — used by MODERATORs to re-encrypt project key
 	joinedAt: string; // ISO-8601
 }
 

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ test.describe('invite link flows', () => {
 		const body = await res.json();
 		expect(body.projectId).toBe(projectId);
 		expect(body.projectName).toBe('Info Project');
-		expect(body.role).toBe('OBSERVER');
+		expect(body.role).toBe('MODERATOR');
 	});
 
 	test('GET /api/invites/[token] does not consume the invite', async ({ request }) => {

@@ -27,7 +27,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
 /**
  * POST /api/projects/[id]/fields
- * Creates a new form field. Requires OBSERVER role.
+ * Creates a new form field. Requires MODERATOR role.
  */
 export const POST: RequestHandler = async ({ params, request, locals }) => {
 	if (!locals.user) throw error(401, 'Authentication required');
@@ -36,7 +36,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		where: { userId_projectId: { userId: locals.user.id, projectId: params.id! } }
 	});
 	if (!membership) throw error(403, 'Not a member of this project');
-	if (membership.role !== 'OBSERVER') throw error(403, 'Observer role required');
+	if (membership.role !== 'MODERATOR') throw error(403, 'Moderator role required');
 
 	let body: unknown;
 	try {

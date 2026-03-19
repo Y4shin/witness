@@ -1,4 +1,4 @@
-import { error, fail, redirect } from '@sveltejs/kit';
+﻿import { error, fail, redirect } from '@sveltejs/kit';
 import { randomBytes } from 'node:crypto';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
@@ -24,13 +24,13 @@ export const actions: Actions = {
 
 		const project = await db.project.create({ data: { name } });
 
-		// Create a single-use admin-generated observer invite link
+		// Create a single-use admin-generated MODERATOR invite link
 		const token = randomBytes(32).toString('base64url');
 		await db.inviteLink.create({
 			data: {
 				token,
 				projectId: project.id,
-				role: 'OBSERVER',
+				role: 'MODERATOR',
 				maxUses: 1
 			}
 		});

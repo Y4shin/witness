@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+﻿import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getInviteInfo, claimInvite, createInvite } from './index';
 import { createTestDb, type TestDb } from '$lib/server/db/test-utils';
 
@@ -21,7 +21,7 @@ async function seedInvite(
 		data: {
 			token: `token-${Math.random().toString(36).slice(2)}`,
 			projectId,
-			role: 'OBSERVER',
+			role: 'MODERATOR',
 			maxUses: overrides.maxUses ?? null,
 			usedCount: overrides.usedCount ?? 0,
 			expiresAt: overrides.expiresAt ?? null
@@ -53,7 +53,7 @@ describe('invite service', () => {
 
 			expect(info.projectId).toBe(project.id);
 			expect(info.projectName).toBe('Test Project');
-			expect(info.role).toBe('OBSERVER');
+			expect(info.role).toBe('MODERATOR');
 		});
 
 		it('does not increment used_count', async () => {
@@ -209,7 +209,7 @@ describe('invite service', () => {
 		it('creates an unlimited invite when maxUses is null', async () => {
 			const project = await seedProject(testDb.db);
 			const invite = await createInvite(
-				{ projectId: project.id, role: 'OBSERVER', maxUses: null },
+				{ projectId: project.id, role: 'MODERATOR', maxUses: null },
 				testDb.db
 			);
 

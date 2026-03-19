@@ -12,7 +12,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 	return {
 		projectId: params.id,
-		role: membership.role as 'SUBMITTER' | 'OBSERVER',
+		role: membership.role as 'SUBMITTER' | 'MODERATOR',
 		encryptedProjectPrivateKey: membership.encryptedProjectPrivateKey ?? null
 	};
 };

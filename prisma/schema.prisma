@@ -11,7 +11,7 @@ datasource db {
 
 enum Role {
   SUBMITTER
-  OBSERVER
+  MODERATOR
 }
 
 enum FieldType {
@@ -25,7 +25,7 @@ enum FieldType {
 model Project {
   id        String   @id @default(uuid())
   name      String
-  publicKey String?  // Null until first observer claims the project and generates the keypair
+  publicKey String?  // Null until first MODERATOR claims the project and generates the keypair
   createdAt DateTime @default(now())
 
   memberships Membership[]
@@ -52,7 +52,7 @@ model Membership {
   userId                     String
   projectId                  String
   role                       Role
-  encryptedProjectPrivateKey String?  // Non-null for OBSERVERs. Encrypted with the user's public key.
+  encryptedProjectPrivateKey String?  // Non-null for MODERATORs. Encrypted with the user's public key.
   joinedAt                   DateTime @default(now())
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)

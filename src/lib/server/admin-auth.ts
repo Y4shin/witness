@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { env } from '$env/dynamic/private';
 import { logger } from '$lib/server/logger';
 
 export const ADMIN_COOKIE_NAME = 'admin-session';
@@ -25,7 +26,7 @@ function sha256(s: string): Buffer {
 
 /** Returns true if ADMIN_PASSWORD is configured in the environment. */
 export function isAdminPasswordConfigured(): boolean {
-	return Boolean(process.env.ADMIN_PASSWORD);
+	return Boolean(env.ADMIN_PASSWORD);
 }
 
 /**
@@ -33,7 +34,7 @@ export function isAdminPasswordConfigured(): boolean {
  * Returns false (not an error) if the env variable is not set.
  */
 export function verifyAdminPassword(input: string): boolean {
-	const expected = process.env.ADMIN_PASSWORD;
+	const expected = env.ADMIN_PASSWORD;
 	if (!expected) return false;
 	return crypto.timingSafeEqual(sha256(input), sha256(expected));
 }

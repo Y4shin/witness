@@ -1,4 +1,4 @@
-import { redirect } from '@sveltejs/kit';
+﻿import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { deleteSession, SESSION_COOKIE_NAME } from '$lib/server/session';
 import { db } from '$lib/server/db';
@@ -20,7 +20,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		projects: memberships.map((m) => ({
 			id: m.project.id,
 			name: m.project.name,
-			role: m.role as 'SUBMITTER' | 'OBSERVER'
+			role: m.role as 'SUBMITTER' | 'MODERATOR'
 		}))
 	};
 };

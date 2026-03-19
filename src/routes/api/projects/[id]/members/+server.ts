@@ -28,7 +28,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	return json({
 		members: memberships.map((m) => ({
 			userId: m.userId,
-			role: m.role as 'SUBMITTER' | 'OBSERVER',
+			role: m.role as 'SUBMITTER' | 'MODERATOR',
 			encryptionPublicKey: m.user.encryptionPublicKey,
 			joinedAt: m.joinedAt.toISOString()
 		}))

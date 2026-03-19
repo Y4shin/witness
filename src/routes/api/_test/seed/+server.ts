@@ -1,14 +1,15 @@
-/**
+﻿/**
  * Test-only seed endpoint. Disabled in production (TEST_MODE != 'true').
  * Supports seeding users and projects with known state.
  * Used by Playwright tests to set up test scenarios without a UI.
  */
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 
 export const POST: RequestHandler = async ({ request }) => {
-	if (process.env.TEST_MODE !== 'true') {
+	if (env.TEST_MODE !== 'true') {
 		throw error(404, 'Not found');
 	}
 
@@ -53,7 +54,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			data: {
 				token: body.token ?? crypto.randomUUID(),
 				projectId: body.projectId,
-				role: body.role ?? 'OBSERVER',
+				role: body.role ?? 'MODERATOR',
 				maxUses: body.maxUses ?? 1,
 				usedCount: body.usedCount ?? 0,
 				// Accept an ISO-8601 string so tests can create expired links (past dates)
@@ -66,7 +67,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (body.type === 'membership') {
 		if (typeof body.userId !== 'string') throw error(400, 'userId is required');
 		if (typeof body.projectId !== 'string') throw error(400, 'projectId is required');
-		const role = body.role === 'SUBMITTER' ? 'SUBMITTER' : 'OBSERVER';
+		const role = body.role === 'SUBMITTER' ? 'SUBMITTER' : 'MODERATOR';
 		const membership = await db.membership.create({
 			data: {
 				userId: body.userId,

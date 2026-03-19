@@ -88,7 +88,7 @@
 
 			// Update local state
 			members = members.map((m) =>
-				m.userId === targetUserId ? { ...m, role: 'OBSERVER' as const } : m
+				m.userId === targetUserId ? { ...m, role: 'MODERATOR' as const } : m
 			);
 		} catch (err) {
 			promoteError =
@@ -135,7 +135,7 @@
 							<tr>
 								<td class="font-mono text-xs">{member.userId}</td>
 								<td>
-									<span class="badge {member.role === 'OBSERVER' ? 'badge-primary' : 'badge-ghost'}">
+									<span class="badge {member.role === 'MODERATOR' ? 'badge-primary' : 'badge-ghost'}">
 										{member.role}
 									</span>
 								</td>
@@ -146,7 +146,7 @@
 											class="btn btn-xs btn-outline"
 											disabled={promoting === member.userId}
 											onclick={() => handlePromote(member.userId, member.encryptionPublicKey)}
-											aria-label={`Promote ${member.userId} to observer`}
+											aria-label={`Promote ${member.userId} to moderator`}
 										>
 											{#if promoting === member.userId}
 												<span class="loading loading-spinner loading-xs"></span>
