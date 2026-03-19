@@ -18,6 +18,7 @@
 			<a href="/dashboard" class="text-base font-semibold tracking-tight">Reporting Tool</a>
 		</div>
 		<div class="flex-none gap-2">
+			<a href="/link-device" class="btn btn-ghost btn-xs">Link device</a>
 			<form method="POST" action="/dashboard?/logout">
 				<button class="btn btn-ghost btn-xs">Log out</button>
 			</form>
