@@ -45,5 +45,19 @@
 	"import_btn": "Importieren & anmelden",
 	"import_success": "Schlüssel erfolgreich importiert! Weiterleitung zum Dashboard…",
 	"import_incomplete": "Dieser Link ist unvollständig oder ungültig. Bitten Sie den Absender, einen neuen Link zu erstellen.",
-	"back_dashboard": "← Dashboard"
+	"back_dashboard": "← Dashboard",
+	"privacy_title": "Wie Ihre Daten geschützt werden",
+	"privacy_e2e_heading": "Ende-zu-Ende-verschlüsselt",
+	"privacy_e2e_body": "Alles, was Sie einreichen — Formularantworten, Dateien, Ihr Name und Ihre Kontaktdaten — wird in Ihrem Browser verschlüsselt, bevor es Ihr Gerät verlässt. Der Server speichert ausschließlich verschlüsselte Daten und kann Ihre Inhalte nicht lesen.",
+	"privacy_identity_heading": "Ihre Identität",
+	"privacy_identity_body": "Ihr Name und Ihre Kontaktdaten werden mit dem öffentlichen Schlüssel des Projekts verschlüsselt. Nur Moderatoren können diese entschlüsseln — nicht der Server, nicht das Infrastruktur-Team.",
+	"privacy_key_heading": "Ihr privater Schlüssel",
+	"privacy_key_body": "Ein kryptografisches Schlüsselpaar wird auf Ihrem Gerät erzeugt und nur in Ihrem Browser gespeichert. Niemand sonst hat Zugriff darauf. Wenn Sie den Browser-Speicher löschen, verlieren Sie den Zugang — es sei denn, Sie haben Ihren Schlüssel gesichert.",
+	"privacy_moderators_heading": "Was Moderatoren sehen können",
+	"privacy_moderators_body": "Moderatoren können alle Einreichungen entschlüsseln und lesen sowie den Namen und die Kontaktdaten jedes Einreichenden. Sie haben keinen Zugriff auf die Schlüssel oder Daten anderer Nutzer.",
+	"privacy_backup_heading": "Schlüssel sichern",
+	"privacy_backup_body": "Verwenden Sie nach der Registrierung \"Gerät verknüpfen\" in der Navigation, um Ihren Schlüssel auf ein anderes Gerät zu exportieren oder eine Sicherungsdatei zu erstellen. Ohne Sicherung bedeutet der Verlust des Browser-Speichers dauerhaft keinen Zugang mehr.",
+	"privacy_close": "Schließen",
+	"privacy_continue": "Verstanden, weiter",
+	"privacy_help_btn": "Datenschutz & Sicherheit"
 }

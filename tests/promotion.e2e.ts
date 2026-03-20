@@ -1,4 +1,4 @@
-﻿/**
+/**
  * E2E tests for Step 14: MODERATOR promotion.
  *
  * Tests cover POST /api/projects/[id]/promote:
@@ -84,12 +84,6 @@ async function seedAndAuth(
 ) {
 	const keys = await generateUserKeys();
 
-	const userRes = await request.post('/api/_test/seed', {
-		data: { type: 'user', signingPublicKey: keys.signingPublicKey, encryptionPublicKey: keys.encryptionPublicKey }
-	});
-	expect(userRes.status()).toBe(200);
-	const { userId } = await userRes.json();
-
 	let projectId = existingProjectId;
 	let projectPublicKey = existingProjectPublicKey;
 	let projectPrivateKey = existingProjectPrivateKey;
@@ -111,9 +105,11 @@ async function seedAndAuth(
 		encryptedProjectPrivateKey = await buildEncryptedProjectPrivateKey(projectPrivateKey, keys.encryptionPublicKey);
 	}
 
-	await request.post('/api/_test/seed', {
-		data: { type: 'membership', userId, projectId, role, encryptedProjectPrivateKey }
+	const memberRes = await request.post('/api/_test/seed', {
+		data: { type: 'member', projectId, signingPublicKey: keys.signingPublicKey, encryptionPublicKey: keys.encryptionPublicKey, role, encryptedProjectPrivateKey }
 	});
+	expect(memberRes.status()).toBe(200);
+	const { memberId } = await memberRes.json();
 
 	// Challenge / verify
 	const { nonce } = await (await request.get('/api/auth/challenge')).json();
@@ -126,7 +122,7 @@ async function seedAndAuth(
 		data: { signingPublicKey: keys.signingPublicKey, nonce, signature: b64url(new Uint8Array(sig)) }
 	});
 
-	return { keys, projectId: projectId!, projectPublicKey: projectPublicKey!, projectPrivateKey, userId };
+	return { keys, projectId: projectId!, projectPublicKey: projectPublicKey!, projectPrivateKey, memberId };
 }
 
 async function reAuth(request: APIRequestContext, signingPublicKey: string, signingPrivateKey: CryptoKey) {
@@ -182,21 +178,17 @@ test.describe('MODERATOR promotion', () => {
 		// Set up MODERATOR (creates project)
 		const { keys: obsKeys, projectId, projectPublicKey, projectPrivateKey } = await seedAndAuth(request, 'MODERATOR');
 
-		// Seed a submitter
+		// Seed a submitter member
 		const subKeys = await generateUserKeys();
-		const subUserRes = await request.post('/api/_test/seed', {
-			data: { type: 'user', signingPublicKey: subKeys.signingPublicKey, encryptionPublicKey: subKeys.encryptionPublicKey }
+		const subMemberRes = await request.post('/api/_test/seed', {
+			data: { type: 'member', projectId, signingPublicKey: subKeys.signingPublicKey, encryptionPublicKey: subKeys.encryptionPublicKey, role: 'SUBMITTER' }
 		});
-		const { userId: subUserId } = await subUserRes.json();
-		await request.post('/api/_test/seed', {
-			data: { type: 'membership', userId: subUserId, projectId, role: 'SUBMITTER' }
-		});
+		const { memberId: subMemberId } = await subMemberRes.json();
 
-		// Re-authenticate as MODERATOR (seeding resets nothing, but let's confirm session is still MODERATOR's)
 		// MODERATOR POSTs promote
 		const encProjPrivKey = await reEncryptProjectKey(projectPrivateKey!, subKeys.encryptionPublicKey);
 		const res = await request.post(`/api/projects/${projectId}/promote`, {
-			data: { targetUserId: subUserId, encryptedProjectPrivateKey: encProjPrivKey }
+			data: { targetMemberId: subMemberId, encryptedProjectPrivateKey: encProjPrivKey }
 		});
 		expect(res.status()).toBe(200);
 		expect((await res.json()).ok).toBe(true);
@@ -209,13 +201,13 @@ test.describe('MODERATOR promotion', () => {
 		const membersRes = await request.get(`/api/projects/${projectId}/members`);
 		expect(membersRes.status()).toBe(200);
 		const { members } = await membersRes.json();
-		const promotedMember = members.find((m: { userId: string }) => m.userId === subUserId);
+		const promotedMember = members.find((m: { memberId: string }) => m.memberId === subMemberId);
 		expect(promotedMember.role).toBe('MODERATOR');
 
 		// Re-auth as MODERATOR again to verify encryptedProjectPrivateKey is accessible via server load
 		// (we check by calling GET /api/projects/[id]/submissions as the promoted MODERATOR, seeding a submission first)
 		await request.post('/api/_test/seed', {
-			data: { type: 'submission', projectId, userId: subUserId, encryptedKeyProject: '{}', encryptedPayload: 'x', encryptedKeyUser: '{}', submitterSignature: 'sig' }
+			data: { type: 'submission', projectId, memberId: subMemberId, encryptedKeyProject: '{}', encryptedPayload: 'x', encryptedKeyUser: '{}', submitterSignature: 'sig' }
 		});
 
 		// Re-auth as MODERATOR (original) and check submissions count
@@ -235,19 +227,16 @@ test.describe('MODERATOR promotion', () => {
 
 		// Seed submitter
 		const subKeys = await generateUserKeys();
-		const subUserRes = await request.post('/api/_test/seed', {
-			data: { type: 'user', signingPublicKey: subKeys.signingPublicKey, encryptionPublicKey: subKeys.encryptionPublicKey }
+		const subMemberRes = await request.post('/api/_test/seed', {
+			data: { type: 'member', projectId, signingPublicKey: subKeys.signingPublicKey, encryptionPublicKey: subKeys.encryptionPublicKey, role: 'SUBMITTER' }
 		});
-		const { userId: subUserId } = await subUserRes.json();
-		await request.post('/api/_test/seed', {
-			data: { type: 'membership', userId: subUserId, projectId, role: 'SUBMITTER' }
-		});
+		const { memberId: subMemberId } = await subMemberRes.json();
 
 		// Re-auth as MODERATOR and promote
 		await reAuth(request, obsKeys.signingPublicKey, obsKeys.signing.privateKey);
 		const encProjPrivKey = await reEncryptProjectKey(projectPrivateKey!, subKeys.encryptionPublicKey);
 		const promoteRes = await request.post(`/api/projects/${projectId}/promote`, {
-			data: { targetUserId: subUserId, encryptedProjectPrivateKey: encProjPrivKey }
+			data: { targetMemberId: subMemberId, encryptedProjectPrivateKey: encProjPrivKey }
 		});
 		expect(promoteRes.status()).toBe(200);
 
@@ -257,7 +246,7 @@ test.describe('MODERATOR promotion', () => {
 		// Get members list to confirm role changed
 		const membersRes = await request.get(`/api/projects/${projectId}/members`);
 		const { members } = await membersRes.json();
-		const me = members.find((m: { userId: string }) => m.userId === subUserId);
+		const me = members.find((m: { memberId: string }) => m.memberId === subMemberId);
 		expect(me.role).toBe('MODERATOR');
 
 		// Simulate decrypting the encryptedProjectPrivateKey received via the promotion
@@ -270,10 +259,10 @@ test.describe('MODERATOR promotion', () => {
 	});
 
 	test('submitter attempting to promote returns 403', async ({ request }) => {
-		const { projectId, userId } = await seedAndAuth(request, 'SUBMITTER');
+		const { projectId, memberId } = await seedAndAuth(request, 'SUBMITTER');
 
 		const res = await request.post(`/api/projects/${projectId}/promote`, {
-			data: { targetUserId: userId, encryptedProjectPrivateKey: '{}' }
+			data: { targetMemberId: memberId, encryptedProjectPrivateKey: '{}' }
 		});
 		expect(res.status()).toBe(403);
 		expect((await res.json()).message).toBeTruthy();
@@ -284,21 +273,18 @@ test.describe('MODERATOR promotion', () => {
 
 		// Seed a second MODERATOR
 		const obs2Keys = await generateUserKeys();
-		const obs2Res = await request.post('/api/_test/seed', {
-			data: { type: 'user', signingPublicKey: obs2Keys.signingPublicKey, encryptionPublicKey: obs2Keys.encryptionPublicKey }
-		});
-		const { userId: obs2Id } = await obs2Res.json();
 		const encProjPrivKey2 = await buildEncryptedProjectPrivateKey(projectPrivateKey!, obs2Keys.encryptionPublicKey);
-		await request.post('/api/_test/seed', {
-			data: { type: 'membership', userId: obs2Id, projectId, role: 'MODERATOR', encryptedProjectPrivateKey: encProjPrivKey2 }
+		const obs2Res = await request.post('/api/_test/seed', {
+			data: { type: 'member', projectId, signingPublicKey: obs2Keys.signingPublicKey, encryptionPublicKey: obs2Keys.encryptionPublicKey, role: 'MODERATOR', encryptedProjectPrivateKey: encProjPrivKey2 }
 		});
+		const { memberId: obs2MemberId } = await obs2Res.json();
 
 		// Re-auth as first MODERATOR
 		await reAuth(request, obsKeys.signingPublicKey, obsKeys.signing.privateKey);
 
 		// Try to promote the second MODERATOR
 		const res = await request.post(`/api/projects/${projectId}/promote`, {
-			data: { targetUserId: obs2Id, encryptedProjectPrivateKey: '{}' }
+			data: { targetMemberId: obs2MemberId, encryptedProjectPrivateKey: '{}' }
 		});
 		expect(res.status()).toBe(409);
 		expect((await res.json()).message).toBeTruthy();
@@ -309,7 +295,7 @@ test.describe('MODERATOR promotion', () => {
 		await reAuth(request, obsKeys.signingPublicKey, obsKeys.signing.privateKey);
 
 		const res = await request.post(`/api/projects/${projectId}/promote`, {
-			data: { targetUserId: 'non-existent-user-id', encryptedProjectPrivateKey: '{}' }
+			data: { targetMemberId: 'non-existent-member-id', encryptedProjectPrivateKey: '{}' }
 		});
 		expect(res.status()).toBe(404);
 		expect((await res.json()).message).toBeTruthy();
@@ -317,7 +303,7 @@ test.describe('MODERATOR promotion', () => {
 
 	test('unauthenticated promote returns 401', async ({ request }) => {
 		const res = await request.post('/api/projects/some-project/promote', {
-			data: { targetUserId: 'u', encryptedProjectPrivateKey: '{}' }
+			data: { targetMemberId: 'u', encryptedProjectPrivateKey: '{}' }
 		});
 		expect(res.status()).toBe(401);
 	});

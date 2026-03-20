@@ -7,8 +7,6 @@ import type {
 	VerifyRequest,
 	VerifyResponse,
 	LogoutResponse,
-	RegisterRequest,
-	RegisterResponse,
 	ProjectPublicKeyResponse,
 	SetProjectPublicKeyRequest,
 	JoinProjectRequest,
@@ -68,11 +66,6 @@ export const api = {
 
 		logout: (): Promise<LogoutResponse> =>
 			post('/api/auth/logout', {})
-	},
-
-	users: {
-		register: (body: RegisterRequest): Promise<RegisterResponse> =>
-			post('/api/users', body)
 	},
 
 	projects: {

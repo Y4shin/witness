@@ -8,7 +8,7 @@ import { ADMIN_COOKIE_NAME, revokeAdminSession } from '$lib/server/admin-auth';
 export const load: PageServerLoad = async () => {
 	const projects = await db.project.findMany({
 		orderBy: { createdAt: 'desc' },
-		include: { inviteLinks: { where: { createdBy: null }, orderBy: { createdAt: 'desc' } } }
+		include: { inviteLinks: { where: { createdByMember: null }, orderBy: { createdAt: 'desc' } } }
 	});
 	return { projects };
 };

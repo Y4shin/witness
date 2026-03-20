@@ -42,12 +42,6 @@ async function authenticate(
 ) {
 	const keys = await generateUserKeys();
 
-	const userRes = await request.post('/api/_test/seed', {
-		data: { type: 'user', signingPublicKey: keys.signingPublicKey, encryptionPublicKey: keys.encryptionPublicKey }
-	});
-	expect(userRes.status()).toBe(200);
-	const { userId } = await userRes.json();
-
 	let projectId = existingProjectId;
 	let projectPublicKey: string | undefined;
 	if (!projectId) {
@@ -62,9 +56,11 @@ async function authenticate(
 		projectId = (await projRes.json()).projectId;
 	}
 
-	await request.post('/api/_test/seed', {
-		data: { type: 'membership', userId, projectId, role }
+	const memberRes = await request.post('/api/_test/seed', {
+		data: { type: 'member', projectId, signingPublicKey: keys.signingPublicKey, encryptionPublicKey: keys.encryptionPublicKey, role }
 	});
+	expect(memberRes.status()).toBe(200);
+	const { memberId } = await memberRes.json();
 
 	const { nonce } = await (await request.get('/api/auth/challenge')).json();
 	const sig = await crypto.subtle.sign(
@@ -76,7 +72,7 @@ async function authenticate(
 		data: { signingPublicKey: keys.signingPublicKey, nonce, signature: b64url(new Uint8Array(sig)) }
 	});
 
-	return { request, keys, projectId: projectId!, projectPublicKey, userId };
+	return { request, keys, projectId: projectId!, projectPublicKey, memberId };
 }
 
 /**
@@ -287,6 +283,7 @@ test.describe('submission API', () => {
 			data: {
 				projectId: otherProjectId,
 				nonce,
+				type: 'WEBPAGE',
 				encryptedPayload: 'data',
 				encryptedKeyProject: '{}',
 				encryptedKeyUser: '{}',

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createUser, UserCreationError } from './index';
+import { createMember, MemberCreationError } from './index';
 import { createTestDb, type TestDb } from '$lib/server/db/test-utils';
 import { generateUserKeyBundle, exportPublicKeyJwk, jwkToString } from '$lib/crypto/keys';
 
@@ -11,11 +11,14 @@ async function makeKeyStrings() {
 	};
 }
 
-describe('createUser', () => {
+describe('createMember', () => {
 	let testDb: TestDb;
+	let projectId: string;
 
 	beforeEach(async () => {
 		testDb = await createTestDb();
+		const project = await testDb.db.project.create({ data: { name: 'Test Project' } });
+		projectId = project.id;
 	});
 
 	afterEach(() => {
@@ -24,30 +27,32 @@ describe('createUser', () => {
 
 	// ── happy path ──────────────────────────────────────────────────────────
 
-	it('creates a user and returns it', async () => {
+	it('creates a member and returns it', async () => {
 		const { db } = testDb;
 		const { signingPublicKey, encryptionPublicKey } = await makeKeyStrings();
 
-		const user = await createUser(
-			{ signingPublicKey, encryptionPublicKey, encryptedName: 'enc-name', encryptedContact: 'enc-contact' },
+		const member = await createMember(
+			{ projectId, signingPublicKey, encryptionPublicKey, encryptedName: 'enc-name', encryptedContact: 'enc-contact', role: 'SUBMITTER' },
 			db
 		);
 
-		expect(user.id).toBeTruthy();
-		expect(user.signingPublicKey).toBe(signingPublicKey);
-		expect(user.encryptionPublicKey).toBe(encryptionPublicKey);
+		expect(member.id).toBeTruthy();
+		expect(member.signingPublicKey).toBe(signingPublicKey);
+		expect(member.encryptionPublicKey).toBe(encryptionPublicKey);
+		expect(member.projectId).toBe(projectId);
+		expect(member.role).toBe('SUBMITTER');
 	});
 
-	it('persists the user to the database', async () => {
+	it('persists the member to the database', async () => {
 		const { db } = testDb;
 		const { signingPublicKey, encryptionPublicKey } = await makeKeyStrings();
 
-		const user = await createUser(
-			{ signingPublicKey, encryptionPublicKey, encryptedName: 'n', encryptedContact: 'c' },
+		const member = await createMember(
+			{ projectId, signingPublicKey, encryptionPublicKey, encryptedName: 'n', encryptedContact: 'c', role: 'MODERATOR' },
 			db
 		);
 
-		const found = await db.user.findUnique({ where: { id: user.id } });
+		const found = await db.member.findUnique({ where: { id: member.id } });
 		expect(found).not.toBeNull();
 		expect(found!.signingPublicKey).toBe(signingPublicKey);
 	});
@@ -57,30 +62,14 @@ describe('createUser', () => {
 	it('throws 400 when signingPublicKey is missing', async () => {
 		const { db } = testDb;
 		await expect(
-			createUser({ signingPublicKey: '', encryptionPublicKey: 'k', encryptedName: 'n', encryptedContact: 'c' }, db)
+			createMember({ projectId, signingPublicKey: '', encryptionPublicKey: 'k', encryptedName: 'n', encryptedContact: 'c', role: 'SUBMITTER' }, db)
 		).rejects.toMatchObject({ statusCode: 400 });
 	});
 
 	it('throws 400 when encryptionPublicKey is missing', async () => {
 		const { db } = testDb;
 		await expect(
-			createUser({ signingPublicKey: 'k', encryptionPublicKey: '', encryptedName: 'n', encryptedContact: 'c' }, db)
-		).rejects.toMatchObject({ statusCode: 400 });
-	});
-
-	it('throws 400 when encryptedName is missing', async () => {
-		const { db } = testDb;
-		const { signingPublicKey, encryptionPublicKey } = await makeKeyStrings();
-		await expect(
-			createUser({ signingPublicKey, encryptionPublicKey, encryptedName: '', encryptedContact: 'c' }, db)
-		).rejects.toMatchObject({ statusCode: 400 });
-	});
-
-	it('throws 400 when encryptedContact is missing', async () => {
-		const { db } = testDb;
-		const { signingPublicKey, encryptionPublicKey } = await makeKeyStrings();
-		await expect(
-			createUser({ signingPublicKey, encryptionPublicKey, encryptedName: 'n', encryptedContact: '' }, db)
+			createMember({ projectId, signingPublicKey: 'k', encryptionPublicKey: '', encryptedName: 'n', encryptedContact: 'c', role: 'SUBMITTER' }, db)
 		).rejects.toMatchObject({ statusCode: 400 });
 	});
 
@@ -88,11 +77,13 @@ describe('createUser', () => {
 		const { db } = testDb;
 		const { encryptionPublicKey } = await makeKeyStrings();
 		await expect(
-			createUser({
+			createMember({
+				projectId,
 				signingPublicKey: '{"kty":"not-valid"}',
 				encryptionPublicKey,
 				encryptedName: 'n',
-				encryptedContact: 'c'
+				encryptedContact: 'c',
+				role: 'SUBMITTER'
 			}, db)
 		).rejects.toMatchObject({ statusCode: 400 });
 	});
@@ -101,11 +92,13 @@ describe('createUser', () => {
 		const { db } = testDb;
 		const { signingPublicKey } = await makeKeyStrings();
 		await expect(
-			createUser({
+			createMember({
+				projectId,
 				signingPublicKey,
 				encryptionPublicKey: 'not json at all',
 				encryptedName: 'n',
-				encryptedContact: 'c'
+				encryptedContact: 'c',
+				role: 'SUBMITTER'
 			}, db)
 		).rejects.toMatchObject({ statusCode: 400 });
 	});
@@ -115,17 +108,17 @@ describe('createUser', () => {
 		const { signingPublicKey, encryptionPublicKey } = await makeKeyStrings();
 		const { encryptionPublicKey: epk2 } = await makeKeyStrings();
 
-		await createUser({ signingPublicKey, encryptionPublicKey, encryptedName: 'n', encryptedContact: 'c' }, db);
+		await createMember({ projectId, signingPublicKey, encryptionPublicKey, encryptedName: 'n', encryptedContact: 'c', role: 'SUBMITTER' }, db);
 
 		await expect(
-			createUser({ signingPublicKey, encryptionPublicKey: epk2, encryptedName: 'n2', encryptedContact: 'c2' }, db)
+			createMember({ projectId, signingPublicKey, encryptionPublicKey: epk2, encryptedName: 'n2', encryptedContact: 'c2', role: 'SUBMITTER' }, db)
 		).rejects.toMatchObject({ statusCode: 409 });
 	});
 
-	it('thrown errors are UserCreationError instances', async () => {
+	it('thrown errors are MemberCreationError instances', async () => {
 		const { db } = testDb;
 		await expect(
-			createUser({ signingPublicKey: '', encryptionPublicKey: '', encryptedName: '', encryptedContact: '' }, db)
-		).rejects.toBeInstanceOf(UserCreationError);
+			createMember({ projectId, signingPublicKey: '', encryptionPublicKey: '', encryptedName: '', encryptedContact: '', role: 'SUBMITTER' }, db)
+		).rejects.toBeInstanceOf(MemberCreationError);
 	});
 });

@@ -44,13 +44,6 @@ async function authenticateWithRole(
 		await crypto.subtle.exportKey('jwk', encryption.publicKey)
 	);
 
-	// Seed user
-	const userRes = await request.post('/api/_test/seed', {
-		data: { type: 'user', signingPublicKey, encryptionPublicKey }
-	});
-	expect(userRes.status()).toBe(200);
-	const { userId } = await userRes.json();
-
 	// Seed project if not provided
 	if (!projectId) {
 		const projRes = await request.post('/api/_test/seed', {
@@ -60,9 +53,9 @@ async function authenticateWithRole(
 		projectId = (await projRes.json()).projectId;
 	}
 
-	// Seed membership
+	// Seed member
 	const memRes = await request.post('/api/_test/seed', {
-		data: { type: 'membership', userId, projectId, role }
+		data: { type: 'member', projectId, signingPublicKey, encryptionPublicKey, role }
 	});
 	expect(memRes.status()).toBe(200);
 

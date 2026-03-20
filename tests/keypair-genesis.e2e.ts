@@ -59,7 +59,8 @@ test.describe('project keypair genesis', () => {
 		await page.goto(
 			`/auth?projectId=${projectId}&inviteToken=${encodeURIComponent(inviteToken)}&role=MODERATOR`
 		);
-		await page.waitForSelector('form', { timeout: 5000 });
+		await page.getByRole('button', { name: 'Understood, continue' }).click();
+	await page.waitForSelector('form', { timeout: 5000 });
 		await page.getByLabel('Name').fill('Alice MODERATOR');
 		await page.getByLabel('Contact').fill('alice@example.com');
 		await page.getByRole('button', { name: 'Register' }).click();
@@ -90,7 +91,8 @@ test.describe('project keypair genesis', () => {
 		await page.goto(
 			`/auth?projectId=${projectId}&inviteToken=${encodeURIComponent(inviteToken)}&role=MODERATOR`
 		);
-		await page.waitForSelector('form', { timeout: 5000 });
+		await page.getByRole('button', { name: 'Understood, continue' }).click();
+	await page.waitForSelector('form', { timeout: 5000 });
 		await page.getByLabel('Name').fill('Bob MODERATOR');
 		await page.getByLabel('Contact').fill('bob@example.com');
 		await page.getByRole('button', { name: 'Register' }).click();
@@ -114,7 +116,8 @@ test.describe('project keypair genesis', () => {
 		await page.goto(
 			`/auth?projectId=${projectId}&inviteToken=${encodeURIComponent(inviteToken)}&role=SUBMITTER`
 		);
-		await page.waitForSelector('form', { timeout: 5000 });
+		await page.getByRole('button', { name: 'Understood, continue' }).click();
+	await page.waitForSelector('form', { timeout: 5000 });
 		await page.getByLabel('Name').fill('Eve Submitter');
 		await page.getByLabel('Contact').fill('eve@example.com');
 		await page.getByRole('button', { name: 'Register' }).click();
@@ -130,12 +133,6 @@ test.describe('project keypair genesis', () => {
 	}) => {
 		const existingPubKey = await generateEcdhPublicKeyJwk();
 		const projectId = await seedProject(request, '409 Project', existingPubKey);
-
-		// Register a user so we have an authenticated session
-		const userSeed = await request.post('/api/_test/seed', {
-			data: { type: 'user', signingPublicKey: 'spk', encryptionPublicKey: 'epk' }
-		});
-		expect(userSeed.status()).toBe(200);
 
 		// Unauthenticated PATCH should return 401
 		const unauthRes = await request.patch(`/api/projects/${projectId}/public-key`, {

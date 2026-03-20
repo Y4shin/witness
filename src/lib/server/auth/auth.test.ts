@@ -11,14 +11,22 @@ import { sign } from '$lib/crypto/signing';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-async function seedUser(db: TestDb['db'], bundle?: UserKeyBundle) {
+async function seedMember(db: TestDb['db'], bundle?: UserKeyBundle) {
 	const keys = bundle ?? (await generateUserKeyBundle());
 	const signingPublicKey = jwkToString(await exportPublicKeyJwk(keys.signing.publicKey));
 	const encryptionPublicKey = jwkToString(await exportPublicKeyJwk(keys.encryption.publicKey));
-	const user = await db.user.create({
-		data: { signingPublicKey, encryptionPublicKey, encryptedName: 'enc-name', encryptedContact: 'enc-contact' }
+	const project = await db.project.create({ data: { name: 'Test Project' } });
+	const member = await db.member.create({
+		data: {
+			projectId: project.id,
+			signingPublicKey,
+			encryptionPublicKey,
+			encryptedName: 'enc-name',
+			encryptedContact: 'enc-contact',
+			role: 'SUBMITTER'
+		}
 	});
-	return { user, keys };
+	return { member, keys };
 }
 
 async function buildValidBody(nonce: string, keys: UserKeyBundle, signingPublicKey: string) {
@@ -78,37 +86,37 @@ describe('auth service', () => {
 	// ── verifyChallenge — happy path ────────────────────────────────────────
 
 	describe('verifyChallenge — happy path', () => {
-		it('returns userId and token for a valid signed challenge', async () => {
+		it('returns memberId and token for a valid signed challenge', async () => {
 			const { db } = testDb;
-			const { user, keys } = await seedUser(db);
+			const { member, keys } = await seedMember(db);
 			const nonce = await issueChallenge(db);
-			const body = await buildValidBody(nonce, keys, user.signingPublicKey);
+			const body = await buildValidBody(nonce, keys, member.signingPublicKey);
 
 			const result = await verifyChallenge(body, db);
 
-			expect(result.userId).toBe(user.id);
+			expect(result.memberId).toBe(member.id);
 			expect(typeof result.token).toBe('string');
 			expect(result.token.length).toBeGreaterThan(0);
 		});
 
 		it('creates a session record in the database', async () => {
 			const { db } = testDb;
-			const { user, keys } = await seedUser(db);
+			const { member, keys } = await seedMember(db);
 			const nonce = await issueChallenge(db);
-			const body = await buildValidBody(nonce, keys, user.signingPublicKey);
+			const body = await buildValidBody(nonce, keys, member.signingPublicKey);
 
 			const { token } = await verifyChallenge(body, db);
 			const session = await db.session.findUnique({ where: { token } });
 
 			expect(session).not.toBeNull();
-			expect(session!.userId).toBe(user.id);
+			expect(session!.memberId).toBe(member.id);
 		});
 
 		it('consumes the nonce so it cannot be reused', async () => {
 			const { db } = testDb;
-			const { user, keys } = await seedUser(db);
+			const { member, keys } = await seedMember(db);
 			const nonce = await issueChallenge(db);
-			const body = await buildValidBody(nonce, keys, user.signingPublicKey);
+			const body = await buildValidBody(nonce, keys, member.signingPublicKey);
 
 			await verifyChallenge(body, db);
 
@@ -149,20 +157,20 @@ describe('auth service', () => {
 
 		it('throws 401 for an unknown nonce', async () => {
 			const { db } = testDb;
-			const { user, keys } = await seedUser(db);
+			const { member, keys } = await seedMember(db);
 			const fakeNonce = 'no-such-nonce-was-ever-issued';
 			const signature = await sign(keys.signing.privateKey, new TextEncoder().encode(fakeNonce));
 
 			await expect(
-				verifyChallenge({ signingPublicKey: user.signingPublicKey, nonce: fakeNonce, signature }, db)
+				verifyChallenge({ signingPublicKey: member.signingPublicKey, nonce: fakeNonce, signature }, db)
 			).rejects.toMatchObject({ statusCode: 401 });
 		});
 
 		it('throws 401 for a replay (nonce used twice)', async () => {
 			const { db } = testDb;
-			const { user, keys } = await seedUser(db);
+			const { member, keys } = await seedMember(db);
 			const nonce = await issueChallenge(db);
-			const body = await buildValidBody(nonce, keys, user.signingPublicKey);
+			const body = await buildValidBody(nonce, keys, member.signingPublicKey);
 
 			await verifyChallenge(body, db); // first use succeeds
 
@@ -172,7 +180,7 @@ describe('auth service', () => {
 
 		it('throws 401 for an expired nonce', async () => {
 			const { db } = testDb;
-			const { user, keys } = await seedUser(db);
+			const { member, keys } = await seedMember(db);
 
 			// Insert an already-expired challenge directly
 			const nonce = 'expired-nonce-xyz';
@@ -182,7 +190,7 @@ describe('auth service', () => {
 			const signature = await sign(keys.signing.privateKey, new TextEncoder().encode(nonce));
 
 			await expect(
-				verifyChallenge({ signingPublicKey: user.signingPublicKey, nonce, signature }, db)
+				verifyChallenge({ signingPublicKey: member.signingPublicKey, nonce, signature }, db)
 			).rejects.toMatchObject({ statusCode: 401 });
 
 			// Expired challenge should be consumed/deleted
@@ -204,38 +212,38 @@ describe('auth service', () => {
 
 		it('throws 401 for an invalid (wrong-key) signature', async () => {
 			const { db } = testDb;
-			const { user } = await seedUser(db);
+			const { member } = await seedMember(db);
 			const otherKeys = await generateUserKeyBundle(); // different keypair
 			const nonce = await issueChallenge(db);
 			// Sign with the wrong private key
 			const signature = await sign(otherKeys.signing.privateKey, new TextEncoder().encode(nonce));
 
 			await expect(
-				verifyChallenge({ signingPublicKey: user.signingPublicKey, nonce, signature }, db)
+				verifyChallenge({ signingPublicKey: member.signingPublicKey, nonce, signature }, db)
 			).rejects.toMatchObject({ statusCode: 401 });
 		});
 
 		it('throws 401 for a tampered signature', async () => {
 			const { db } = testDb;
-			const { user, keys } = await seedUser(db);
+			const { member, keys } = await seedMember(db);
 			const nonce = await issueChallenge(db);
 			const sig = await sign(keys.signing.privateKey, new TextEncoder().encode(nonce));
 			const tampered = sig.slice(0, -2) + (sig.endsWith('AA') ? 'BB' : 'AA');
 
 			await expect(
-				verifyChallenge({ signingPublicKey: user.signingPublicKey, nonce, signature: tampered }, db)
+				verifyChallenge({ signingPublicKey: member.signingPublicKey, nonce, signature: tampered }, db)
 			).rejects.toMatchObject({ statusCode: 401 });
 		});
 
 		it('throws 401 for a signature over different data (wrong message)', async () => {
 			const { db } = testDb;
-			const { user, keys } = await seedUser(db);
+			const { member, keys } = await seedMember(db);
 			const nonce = await issueChallenge(db);
 			// Sign a different message
 			const signature = await sign(keys.signing.privateKey, new TextEncoder().encode('not the nonce'));
 
 			await expect(
-				verifyChallenge({ signingPublicKey: user.signingPublicKey, nonce, signature }, db)
+				verifyChallenge({ signingPublicKey: member.signingPublicKey, nonce, signature }, db)
 			).rejects.toMatchObject({ statusCode: 401 });
 		});
 

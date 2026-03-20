@@ -8,6 +8,8 @@
 	let confirmDeleteId = $state<string | null>(null);
 </script>
 
+<svelte:head><title>Witness – Admin</title></svelte:head>
+
 <div class="min-h-screen bg-base-200 p-6">
 	<div class="max-w-3xl mx-auto space-y-6">
 		<!-- Header -->

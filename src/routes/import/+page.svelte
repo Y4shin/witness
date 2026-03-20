@@ -1,17 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import {
-		deriveKeyFromPassphrase,
-		decryptSymmetric,
-		decode,
-		importUserKeyBundleJwk,
-		jwkToString,
-		exportPublicKeyJwk,
-		sign
-	} from '$lib/crypto';
-	import { saveKeys } from '$lib/client/key-store';
-	import { api, ApiError } from '$lib/client/api';
-	import type { UserKeyBundleJwk } from '$lib/crypto/keys';
+	import { deriveKeyFromPassphrase, decryptSymmetric, decode } from '$lib/crypto';
+	import { saveMembership } from '$lib/client/key-store';
+	import type { StoredMembership } from '$lib/client/key-store';
 	import * as m from '$lib/paraglide/messages';
 
 	export const ssr = false;
@@ -51,43 +42,39 @@
 		importing = true;
 
 		try {
+			if (fragmentData.v === 1) {
+				formError = 'Legacy backup (v1) cannot be restored without project context. Please re-register using your invite link.';
+				return;
+			}
+
 			// Decode stored salt back to Uint8Array
 			const saltBytes = decode(fragmentData.salt);
 			const { key } = await deriveKeyFromPassphrase(passphrase, { salt: saltBytes });
 
-			let keyBundleJwk: UserKeyBundleJwk;
+			let memberships: Record<string, StoredMembership>;
 			try {
 				const plaintext = await decryptSymmetric(key, fragmentData.encrypted);
-				keyBundleJwk = JSON.parse(new TextDecoder().decode(plaintext)) as UserKeyBundleJwk;
+				memberships = JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, StoredMembership>;
 			} catch {
 				formError = 'Wrong passphrase — decryption failed';
 				return;
 			}
 
-			// Validate the bundle by importing it
-			const userBundle = await importUserKeyBundleJwk(keyBundleJwk);
-
-			// Save to localStorage
-			saveKeys(keyBundleJwk);
-
-			// Authenticate with the server
-			const signingPublicKey = jwkToString(await exportPublicKeyJwk(userBundle.signing.publicKey));
-			const { nonce } = await api.auth.challenge();
-			const nonceBytes = new TextEncoder().encode(nonce);
-			const sigBytes = await sign(userBundle.signing.privateKey, nonceBytes);
-			await api.auth.verify({ signingPublicKey, nonce, signature: sigBytes });
+			// Merge imported memberships (don't overwrite existing entries)
+			for (const [projectId, mem] of Object.entries(memberships)) {
+				saveMembership(projectId, mem.bundle, mem.projectName, mem.role);
+			}
 
 			mode = 'success';
-			setTimeout(() => { window.location.href = '/dashboard'; }, 1500);
 		} catch (err) {
-			formError = err instanceof ApiError ? err.message : (err instanceof Error ? err.message : 'Import failed');
+			formError = err instanceof Error ? err.message : 'Import failed';
 		} finally {
 			importing = false;
 		}
 	}
 </script>
 
-<svelte:head><title>{m.import_title()}</title></svelte:head>
+<svelte:head><title>Witness – {m.import_title()}</title></svelte:head>
 
 <div class="mx-auto max-w-sm p-6 flex flex-col gap-6">
 	<h1 class="text-2xl font-bold">{m.import_title()}</h1>
@@ -130,6 +117,7 @@
 		<div role="status" class="alert alert-success">
 			<span>{m.import_success()}</span>
 		</div>
+		<a href="/dashboard" class="btn btn-primary">Go to dashboard</a>
 
 	{:else if mode === 'error'}
 		<div role="alert" class="alert alert-error">

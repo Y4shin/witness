@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto';
-import type { PrismaClient, User } from '$lib/server/prisma/client';
+import type { Member, PrismaClient } from '$lib/server/prisma/client';
 import { logger } from '$lib/server/logger';
 
 export const SESSION_COOKIE_NAME = 'session';
@@ -23,43 +23,43 @@ export function generateToken(): string {
 }
 
 /**
- * Creates a new session for the given user and returns the session token.
+ * Creates a new session for the given member and returns the session token.
  * The caller is responsible for setting the token as a cookie.
  */
-export async function createSession(userId: string, db: PrismaClient): Promise<string> {
+export async function createSession(memberId: string, db: PrismaClient): Promise<string> {
 	const token = generateToken();
 	const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
 
-	await db.session.create({ data: { userId, token, expiresAt } });
+	await db.session.create({ data: { memberId, token, expiresAt } });
 
-	logger.info({ userId }, 'Session created');
+	logger.info({ memberId }, 'Session created');
 	return token;
 }
 
 /**
- * Validates a session token and returns the associated user, or null if the
+ * Validates a session token and returns the associated member, or null if the
  * token is missing, invalid, or expired. Expired sessions are lazily deleted.
  */
 export async function validateSession(
 	token: string | undefined,
 	db: PrismaClient
-): Promise<User | null> {
+): Promise<Member | null> {
 	if (!token) return null;
 
 	const session = await db.session.findUnique({
 		where: { token },
-		include: { user: true }
+		include: { member: true }
 	});
 
 	if (!session) return null;
 
 	if (session.expiresAt < new Date()) {
 		await db.session.delete({ where: { token } }).catch(() => {});
-		logger.info({ userId: session.userId }, 'Expired session removed');
+		logger.info({ memberId: session.memberId }, 'Expired session removed');
 		return null;
 	}
 
-	return session.user;
+	return session.member;
 }
 
 /**

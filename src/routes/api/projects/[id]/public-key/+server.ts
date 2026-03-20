@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { logger } from '$lib/server/logger';
-import type { ProjectPublicKeyResponse, SetProjectPublicKeyRequest } from '$lib/api-types';
+import type { ProjectPublicKeyResponse } from '$lib/api-types';
 
 export const GET: RequestHandler = async ({ params }) => {
 	const project = await db.project.findUnique({ where: { id: params.id } });
@@ -18,7 +18,7 @@ export const GET: RequestHandler = async ({ params }) => {
  * Requires an authenticated session.
  */
 export const PATCH: RequestHandler = async ({ params, request, locals }) => {
-	if (!locals.user) throw error(401, 'Authentication required');
+	if (!locals.member) throw error(401, 'Authentication required');
 
 	let body: unknown;
 	try {
@@ -38,7 +38,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 
 	await db.project.update({ where: { id: params.id }, data: { publicKey: b.publicKey } });
 
-	logger.info({ projectId: params.id, userId: locals.user.id }, 'Project public key set');
+	logger.info({ projectId: params.id, memberId: locals.member.id }, 'Project public key set');
 
 	return json({ publicKey: b.publicKey } satisfies ProjectPublicKeyResponse);
 };

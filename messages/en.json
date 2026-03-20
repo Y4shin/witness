@@ -45,5 +45,19 @@
 	"import_btn": "Import & sign in",
 	"import_success": "Keys imported successfully! Redirecting to dashboard…",
 	"import_incomplete": "This link is incomplete or invalid. Please ask the sender to generate a new link.",
-	"back_dashboard": "← Dashboard"
+	"back_dashboard": "← Dashboard",
+	"privacy_title": "How your data is protected",
+	"privacy_e2e_heading": "End-to-end encrypted",
+	"privacy_e2e_body": "Everything you submit — form responses, files, your name, and contact info — is encrypted in your browser before it leaves your device. The server only ever stores ciphertext and cannot read your data.",
+	"privacy_identity_heading": "Your identity",
+	"privacy_identity_body": "Your name and contact information are encrypted with the project's public key. Only moderators can decrypt this — not the server, not the infrastructure team.",
+	"privacy_key_heading": "Your private key",
+	"privacy_key_body": "A cryptographic key pair is generated on your device and stored only in your browser. Nobody else ever has access to it. If you clear your browser storage, you will lose access unless you have backed up your key.",
+	"privacy_moderators_heading": "What moderators can see",
+	"privacy_moderators_body": "Moderators can decrypt and read all submissions, plus the name and contact info of each submitter. They cannot access other users' keys or data.",
+	"privacy_backup_heading": "Backing up your key",
+	"privacy_backup_body": "After registering, use \"Link device\" in the navigation to export your key to another device or save a backup file. Without a backup, losing browser storage means losing access permanently.",
+	"privacy_close": "Close",
+	"privacy_continue": "Understood, continue",
+	"privacy_help_btn": "Privacy & security info"
 }

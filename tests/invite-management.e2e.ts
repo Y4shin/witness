@@ -1,4 +1,4 @@
-﻿/**
+/**
  * E2E tests for Step 15: invite link management.
  *
  * Tests cover:
@@ -37,12 +37,6 @@ async function generateUserKeys() {
 async function seedAndAuth(request: APIRequestContext, role: 'SUBMITTER' | 'MODERATOR' = 'MODERATOR') {
 	const keys = await generateUserKeys();
 
-	const userRes = await request.post('/api/_test/seed', {
-		data: { type: 'user', signingPublicKey: keys.signingPublicKey, encryptionPublicKey: keys.encryptionPublicKey }
-	});
-	expect(userRes.status()).toBe(200);
-	const { userId } = await userRes.json();
-
 	const projectEcdh = await crypto.subtle.generateKey(
 		{ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']
 	);
@@ -52,9 +46,11 @@ async function seedAndAuth(request: APIRequestContext, role: 'SUBMITTER' | 'MODE
 	});
 	const { projectId } = await projRes.json();
 
-	await request.post('/api/_test/seed', {
-		data: { type: 'membership', userId, projectId, role }
+	const memberRes = await request.post('/api/_test/seed', {
+		data: { type: 'member', projectId, signingPublicKey: keys.signingPublicKey, encryptionPublicKey: keys.encryptionPublicKey, role }
 	});
+	expect(memberRes.status()).toBe(200);
+	const { memberId } = await memberRes.json();
 
 	const { nonce } = await (await request.get('/api/auth/challenge')).json();
 	const sig = await crypto.subtle.sign(
@@ -66,7 +62,7 @@ async function seedAndAuth(request: APIRequestContext, role: 'SUBMITTER' | 'MODE
 		data: { signingPublicKey: keys.signingPublicKey, nonce, signature: b64url(new Uint8Array(sig)) }
 	});
 
-	return { keys, projectId, userId };
+	return { keys, projectId, memberId };
 }
 
 // ── tests ──────────────────────────────────────────────────────────────────
@@ -195,15 +191,12 @@ test.describe('invite link management', () => {
 		});
 		const { token } = await createRes.json();
 
-		// Seed and auth a submitter
+		// Seed and auth a submitter member
 		const subKeys = await generateUserKeys();
-		const subUserRes = await request.post('/api/_test/seed', {
-			data: { type: 'user', signingPublicKey: subKeys.signingPublicKey, encryptionPublicKey: subKeys.encryptionPublicKey }
+		const subMemberRes = await request.post('/api/_test/seed', {
+			data: { type: 'member', projectId, signingPublicKey: subKeys.signingPublicKey, encryptionPublicKey: subKeys.encryptionPublicKey, role: 'SUBMITTER' }
 		});
-		const { userId: subUserId } = await subUserRes.json();
-		await request.post('/api/_test/seed', {
-			data: { type: 'membership', userId: subUserId, projectId, role: 'SUBMITTER' }
-		});
+		expect(subMemberRes.status()).toBe(200);
 		const { nonce } = await (await request.get('/api/auth/challenge')).json();
 		const sig = await crypto.subtle.sign(
 			{ name: 'ECDSA', hash: 'SHA-256' }, subKeys.signing.privateKey, new TextEncoder().encode(nonce)

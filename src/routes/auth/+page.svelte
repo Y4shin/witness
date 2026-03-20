@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -18,11 +18,16 @@
 		encryptSymmetricKeyFor,
 		sign
 	} from '$lib/crypto';
-	import { loadStoredKeys, saveKeys, clearKeys } from '$lib/client/key-store';
+	import {
+		loadMembershipForProject,
+		saveMembership,
+		clearMembership
+	} from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
+	import type { UserKeyBundleJwk } from '$lib/crypto/keys';
 	import * as m from '$lib/paraglide/messages';
 
-	type Mode = 'loading' | 'register' | 'submitting' | 'login' | 'error';
+	type Mode = 'loading' | 'onboarding' | 'register' | 'submitting' | 'login' | 'nocontext' | 'error';
 	type Role = 'SUBMITTER' | 'MODERATOR';
 
 	let mode = $state<Mode>('loading');
@@ -31,6 +36,7 @@
 
 	const projectId = $derived(page.url.searchParams.get('projectId'));
 	const inviteToken = $derived(page.url.searchParams.get('inviteToken'));
+	const nextUrl = $derived(page.url.searchParams.get('next'));
 	const role = $derived(page.url.searchParams.get('role') as Role | null);
 
 	// ── auth helpers ───────────────────────────────────────────────────────────
@@ -41,30 +47,27 @@
 		await api.auth.verify({ signingPublicKey: signingPublicKeyJwk, nonce, signature });
 	}
 
-	// ── login (returning user) ─────────────────────────────────────────────────
+	// ── per-project login ──────────────────────────────────────────────────────
 
-	async function performLogin(): Promise<void> {
+	async function performLoginForProject(pid: string, bundle: UserKeyBundleJwk): Promise<void> {
 		mode = 'login';
 		statusMessage = 'Authenticating…';
 		try {
-			const stored = loadStoredKeys();
-			if (!stored) { mode = 'register'; return; }
-
-			const bundle = await importUserKeyBundleJwk(stored);
-			const spkJwk = jwkToString(await exportPublicKeyJwk(bundle.signing.publicKey));
-			await challengeResponse(bundle.signing.privateKey, spkJwk);
-			await goto('/dashboard');
+			const keys = await importUserKeyBundleJwk(bundle);
+			const spkJwk = jwkToString(await exportPublicKeyJwk(keys.signing.publicKey));
+			await challengeResponse(keys.signing.privateKey, spkJwk);
+			await goto(nextUrl ?? `/projects/${pid}`);
 		} catch (err) {
 			formError = err instanceof ApiError ? err.message : 'Login failed';
 			mode = 'error';
 		}
 	}
 
-	// ── registration (first-time user) ────────────────────────────────────────
+	// ── registration (first-time for this project) ─────────────────────────────
 
 	async function handleRegister(data: { name: string; contact: string }): Promise<void> {
 		if (!projectId || !inviteToken || !role) {
-			formError = 'Missing project context. Please use an invite link.';
+			formError = 'Missing project context. Please use a valid invite link.';
 			return;
 		}
 
@@ -76,10 +79,9 @@
 			const bundle = await generateUserKeyBundle();
 			const jwks = await exportUserKeyBundleJwk(bundle);
 
-			// ── Determine if this is the first MODERATOR (project has no key yet) ──
+			// ── Determine project public key ──────────────────────────────────
 			let projectPublicKey: CryptoKey;
 			let encryptedProjectPrivateKey: string | null = null;
-			// Held for upload after authentication (PATCH requires an active session)
 			let pendingProjectPublicKeyJwk: string | null = null;
 
 			if (role === 'MODERATOR') {
@@ -93,7 +95,6 @@
 				}
 
 				if (existingKeyStr) {
-					// Subsequent MODERATOR: project key already exists
 					projectPublicKey = await importEcdhPublicKey(stringToJwk(existingKeyStr));
 				} else {
 					// First MODERATOR: generate the project keypair
@@ -103,35 +104,27 @@
 					projectPublicKey = projectKeyPair.publicKey;
 					pendingProjectPublicKeyJwk = jwkToString(projectPubJwk);
 
-					// Encrypt the project private key for storage in our own membership
+					// Encrypt project private key for storage in this member record
 					const pkcs8 = await exportPrivateKeyPkcs8(projectKeyPair.privateKey);
 					const symKey = await generateSymmetricKey();
 					const [encryptedPayload, encryptedSymKey] = await Promise.all([
 						encryptSymmetric(symKey, pkcs8),
-						encryptSymmetricKeyFor(
-							symKey,
-							await importEcdhPublicKey(jwks.encryptionPublicKey)
-						)
+						encryptSymmetricKeyFor(symKey, await importEcdhPublicKey(jwks.encryptionPublicKey))
 					]);
-					encryptedProjectPrivateKey = JSON.stringify({
-						payload: encryptedPayload,
-						key: encryptedSymKey
-					});
+					encryptedProjectPrivateKey = JSON.stringify({ payload: encryptedPayload, key: encryptedSymKey });
 				}
 			} else {
 				// Submitter: project must already have a public key
 				statusMessage = 'Fetching project public key…';
-				let keyStr: string;
 				try {
 					const resp = await api.projects.getPublicKey(projectId);
-					keyStr = resp.publicKey;
+					projectPublicKey = await importEcdhPublicKey(stringToJwk(resp.publicKey));
 				} catch (err) {
 					if (err instanceof ApiError && err.status === 404) {
 						throw new Error('This project is not ready yet. Please contact the project admin.');
 					}
 					throw err;
 				}
-				projectPublicKey = await importEcdhPublicKey(stringToJwk(keyStr));
 			}
 
 			// ── Encrypt name + contact with project public key ─────────────────
@@ -151,13 +144,15 @@
 			const encryptedName = JSON.stringify({ payload: encryptedNamePayload, key: encryptedNameKey });
 			const encryptedContact = JSON.stringify({ payload: encryptedContactPayload, key: encryptedContactKey });
 
-			// ── Create user account ────────────────────────────────────────────
-			statusMessage = 'Registering…';
-			await api.users.register({
+			// ── Join project (creates member, consumes invite) ─────────────────
+			statusMessage = 'Joining project…';
+			const joinResp = await api.memberships.join({
+				inviteToken,
 				signingPublicKey: jwkToString(jwks.signingPublicKey),
 				encryptionPublicKey: jwkToString(jwks.encryptionPublicKey),
 				encryptedName,
-				encryptedContact
+				encryptedContact,
+				encryptedProjectPrivateKey
 			});
 
 			// ── Authenticate (get session cookie) ──────────────────────────────
@@ -170,13 +165,9 @@
 				await api.projects.setPublicKey(projectId, { publicKey: pendingProjectPublicKeyJwk });
 			}
 
-			// ── Create membership (validates + consumes invite token) ──────────
-			statusMessage = 'Joining project…';
-			await api.memberships.join({ inviteToken, encryptedProjectPrivateKey });
-
-			// Persist keys only after the full flow succeeds
-			saveKeys(jwks);
-			await goto('/dashboard');
+			// Persist membership only after the full flow succeeds
+			saveMembership(joinResp.projectId, jwks, joinResp.projectName, joinResp.role);
+			await goto(nextUrl ?? '/dashboard');
 		} catch (err) {
 			formError = err instanceof ApiError ? err.message : (err instanceof Error ? err.message : 'Registration failed');
 			mode = 'register';
@@ -184,7 +175,7 @@
 	}
 
 	function handleStartOver(): void {
-		clearKeys();
+		if (projectId) clearMembership(projectId);
 		formError = '';
 		mode = 'register';
 	}
@@ -192,13 +183,26 @@
 	// ── lifecycle ───────────────────────────────────────────────────────────────
 
 	onMount(async () => {
-		if (loadStoredKeys()) {
-			await performLogin();
+		if (!projectId) {
+			mode = 'nocontext';
+			return;
+		}
+
+		const stored = loadMembershipForProject(projectId);
+		if (stored) {
+			// Returning member: auto-login silently (invite not required)
+			await performLoginForProject(projectId, stored.bundle);
+		} else if (!inviteToken) {
+			// No stored membership and no invite — nothing to do
+			mode = 'nocontext';
 		} else {
-			mode = 'register';
+			// First-time registration: show privacy onboarding
+			mode = 'onboarding';
 		}
 	});
 </script>
+
+<svelte:head><title>Witness – Sign in</title></svelte:head>
 
 <div class="min-h-screen flex items-center justify-center p-4">
 	<div class="card bg-base-100 shadow-xl w-full max-w-md">
@@ -206,6 +210,42 @@
 			{#if mode === 'loading'}
 				<div class="flex justify-center">
 					<span class="loading loading-spinner loading-lg"></span>
+				</div>
+
+			{:else if mode === 'nocontext'}
+				<div role="alert" class="alert alert-warning">
+					<span>No invite link found. Please use a valid invite link to join a project.</span>
+				</div>
+				<a href="/" class="btn btn-outline mt-2">Go home</a>
+
+			{:else if mode === 'onboarding'}
+				<h1 class="card-title text-xl mb-4">{m.privacy_title()}</h1>
+				<div class="flex flex-col gap-3 text-sm">
+					<div>
+						<p class="font-semibold mb-0.5">{m.privacy_e2e_heading()}</p>
+						<p class="text-base-content/70">{m.privacy_e2e_body()}</p>
+					</div>
+					<div>
+						<p class="font-semibold mb-0.5">{m.privacy_identity_heading()}</p>
+						<p class="text-base-content/70">{m.privacy_identity_body()}</p>
+					</div>
+					<div>
+						<p class="font-semibold mb-0.5">{m.privacy_key_heading()}</p>
+						<p class="text-base-content/70">{m.privacy_key_body()}</p>
+					</div>
+					<div>
+						<p class="font-semibold mb-0.5">{m.privacy_moderators_heading()}</p>
+						<p class="text-base-content/70">{m.privacy_moderators_body()}</p>
+					</div>
+					<div>
+						<p class="font-semibold mb-0.5">{m.privacy_backup_heading()}</p>
+						<p class="text-base-content/70">{m.privacy_backup_body()}</p>
+					</div>
+				</div>
+				<div class="card-actions mt-5">
+					<button class="btn btn-primary w-full" onclick={() => (mode = 'register')}>
+						{m.privacy_continue()}
+					</button>
 				</div>
 
 			{:else if mode === 'register'}

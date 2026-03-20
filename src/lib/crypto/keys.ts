@@ -80,9 +80,13 @@ export async function importEcdsaPublicKey(jwk: JsonWebKey): Promise<CryptoKey> 
 	return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['verify']);
 }
 
-/** Serialize a public key JWK to a compact JSON string for storage */
+/** Serialize a JWK to a canonical JSON string (alphabetically sorted keys) for storage and lookup */
 export function jwkToString(jwk: JsonWebKey): string {
-	return JSON.stringify(jwk);
+	return JSON.stringify(
+		Object.fromEntries(
+			Object.entries(jwk as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))
+		)
+	);
 }
 
 export function stringToJwk(s: string): JsonWebKey {

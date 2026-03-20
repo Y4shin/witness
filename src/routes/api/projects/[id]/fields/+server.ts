@@ -10,12 +10,8 @@ import type { GetFieldsResponse, CreateFieldRequest, CreateFieldResponse } from 
  * Requires the caller to be a member (any role) of the project.
  */
 export const GET: RequestHandler = async ({ params, locals }) => {
-	if (!locals.user) throw error(401, 'Authentication required');
-
-	const membership = await db.membership.findUnique({
-		where: { userId_projectId: { userId: locals.user.id, projectId: params.id! } }
-	});
-	if (!membership) throw error(403, 'Not a member of this project');
+	if (!locals.member) throw error(401, 'Authentication required');
+	if (locals.member.projectId !== params.id) throw error(403, 'Not a member of this project');
 
 	const fields = await db.formField.findMany({
 		where: { projectId: params.id },
@@ -30,13 +26,9 @@ export const GET: RequestHandler = async ({ params, locals }) => {
  * Creates a new form field. Requires MODERATOR role.
  */
 export const POST: RequestHandler = async ({ params, request, locals }) => {
-	if (!locals.user) throw error(401, 'Authentication required');
-
-	const membership = await db.membership.findUnique({
-		where: { userId_projectId: { userId: locals.user.id, projectId: params.id! } }
-	});
-	if (!membership) throw error(403, 'Not a member of this project');
-	if (membership.role !== 'MODERATOR') throw error(403, 'Moderator role required');
+	if (!locals.member) throw error(401, 'Authentication required');
+	if (locals.member.projectId !== params.id) throw error(403, 'Not a member of this project');
+	if (locals.member.role !== 'MODERATOR') throw error(403, 'Moderator role required');
 
 	let body: unknown;
 	try {
@@ -89,7 +81,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		}
 	});
 
-	logger.info({ projectId: params.id, userId: locals.user.id, fieldId: field.id }, 'Form field created');
+	logger.info({ projectId: params.id, memberId: locals.member.id, fieldId: field.id }, 'Form field created');
 
 	return json({ field } satisfies CreateFieldResponse, { status: 201 });
 };

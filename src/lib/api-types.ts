@@ -1,23 +1,10 @@
-﻿/**
+/**
  * Shared request/response shapes for all API endpoints.
  *
  * Server handlers use `satisfies` against these types so TypeScript catches
  * shape mismatches at build time. Client callers cast to these types via the
  * typed api() wrapper in $lib/client/api.ts.
  */
-
-// ── POST /api/users ───────────────────────────────────────────────────────
-
-export interface RegisterRequest {
-	signingPublicKey: string;
-	encryptionPublicKey: string;
-	encryptedName: string;
-	encryptedContact: string;
-}
-
-export interface RegisterResponse {
-	userId: string;
-}
 
 // ── GET /api/auth/challenge ────────────────────────────────────────────────
 
@@ -56,16 +43,23 @@ export interface SetProjectPublicKeyRequest {
 }
 
 // ── POST /api/memberships ─────────────────────────────────────────────────
+// Registers a new per-project identity and joins the project in one step.
 
 export interface JoinProjectRequest {
 	inviteToken: string;
-	/** ECDH private key encrypted with the user's own ECDH public key.
+	signingPublicKey: string;
+	encryptionPublicKey: string;
+	encryptedName: string;
+	encryptedContact: string;
+	/** ECDH private key encrypted with the member's own ECDH public key.
 	 *  Required for the first MODERATOR to initialise the project keypair. */
 	encryptedProjectPrivateKey?: string | null;
 }
 
 export interface JoinProjectResponse {
+	memberId: string;
 	projectId: string;
+	projectName: string;
 	role: 'SUBMITTER' | 'MODERATOR';
 }
 
@@ -213,7 +207,7 @@ export interface RevokeInviteResponse {
 // ── GET /api/projects/[id]/members ────────────────────────────────────────
 
 export interface MemberRecord {
-	userId: string;
+	memberId: string;
 	role: 'SUBMITTER' | 'MODERATOR';
 	encryptionPublicKey: string; // JWK string — used by MODERATORs to re-encrypt project key
 	joinedAt: string; // ISO-8601
@@ -226,8 +220,8 @@ export interface GetMembersResponse {
 // ── POST /api/projects/[id]/promote ───────────────────────────────────────
 
 export interface PromoteRequest {
-	targetUserId: string;
-	encryptedProjectPrivateKey: string; // JSON: { payload, key } encrypted for target user
+	targetMemberId: string;
+	encryptedProjectPrivateKey: string; // JSON: { payload, key } encrypted for target member
 }
 
 export interface PromoteResponse {
@@ -238,7 +232,7 @@ export interface PromoteResponse {
 
 export interface SubmissionRecord {
 	id: string;
-	userId: string;
+	memberId: string;
 	projectId: string;
 	type: SubmissionType;
 	archiveUrl: string | null;

@@ -7,35 +7,27 @@ CREATE TABLE "Project" (
 );
 
 -- CreateTable
-CREATE TABLE "User" (
+CREATE TABLE "Member" (
     "id" TEXT NOT NULL PRIMARY KEY,
-    "publicKey" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "signingPublicKey" TEXT NOT NULL,
+    "encryptionPublicKey" TEXT NOT NULL,
     "encryptedName" TEXT NOT NULL,
     "encryptedContact" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- CreateTable
-CREATE TABLE "Membership" (
-    "userId" TEXT NOT NULL,
-    "projectId" TEXT NOT NULL,
     "role" TEXT NOT NULL,
     "encryptedProjectPrivateKey" TEXT,
     "joinedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    PRIMARY KEY ("userId", "projectId"),
-    CONSTRAINT "Membership_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "Membership_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    CONSTRAINT "Member_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
 CREATE TABLE "Session" (
     "id" TEXT NOT NULL PRIMARY KEY,
-    "userId" TEXT NOT NULL,
+    "memberId" TEXT NOT NULL,
     "token" TEXT NOT NULL,
     "expiresAt" DATETIME NOT NULL,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    CONSTRAINT "Session_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "Member" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -49,7 +41,7 @@ CREATE TABLE "InviteLink" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "token" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
-    "createdBy" TEXT,
+    "createdByMember" TEXT,
     "creatorSignature" TEXT,
     "role" TEXT NOT NULL,
     "maxUses" INTEGER,
@@ -57,21 +49,24 @@ CREATE TABLE "InviteLink" (
     "expiresAt" DATETIME,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "InviteLink_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "InviteLink_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    CONSTRAINT "InviteLink_createdByMember_fkey" FOREIGN KEY ("createdByMember") REFERENCES "Member" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- CreateTable
 CREATE TABLE "Submission" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "projectId" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
+    "memberId" TEXT NOT NULL,
+    "type" TEXT NOT NULL DEFAULT 'WEBPAGE',
+    "archiveCandidateUrl" TEXT,
+    "archiveUrl" TEXT,
     "encryptedPayload" TEXT NOT NULL,
     "encryptedKeyProject" TEXT NOT NULL,
     "encryptedKeyUser" TEXT NOT NULL,
     "submitterSignature" TEXT NOT NULL,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "Submission_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "Submission_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    CONSTRAINT "Submission_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "Member" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -79,6 +74,7 @@ CREATE TABLE "SubmissionFile" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "submissionId" TEXT NOT NULL,
     "fieldName" TEXT NOT NULL,
+    "mimeType" TEXT,
     "storagePath" TEXT NOT NULL,
     "encryptedKey" TEXT NOT NULL,
     "encryptedKeyUser" TEXT NOT NULL,
@@ -101,7 +97,10 @@ CREATE TABLE "FormField" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "User_publicKey_key" ON "User"("publicKey");
+CREATE UNIQUE INDEX "Member_signingPublicKey_key" ON "Member"("signingPublicKey");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Member_encryptionPublicKey_key" ON "Member"("encryptionPublicKey");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Session_token_key" ON "Session"("token");

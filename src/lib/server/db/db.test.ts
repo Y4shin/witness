@@ -33,58 +33,87 @@ describe('database', () => {
 		expect(found.name).toBe('Readable');
 	});
 
-	it('creates a user', async () => {
+	it('creates a member', async () => {
 		const { db } = testDb;
-		const user = await db.user.create({
+		const project = await db.project.create({ data: { name: 'Member Project' } });
+		const member = await db.member.create({
 			data: {
+				projectId: project.id,
 				signingPublicKey: 'spk-abc123',
 				encryptionPublicKey: 'epk-abc123',
 				encryptedName: 'enc-name',
-				encryptedContact: 'enc-contact'
+				encryptedContact: 'enc-contact',
+				role: 'SUBMITTER'
 			}
 		});
 
-		expect(user.id).toBeTruthy();
-		expect(user.signingPublicKey).toBe('spk-abc123');
-		expect(user.encryptionPublicKey).toBe('epk-abc123');
+		expect(member.id).toBeTruthy();
+		expect(member.signingPublicKey).toBe('spk-abc123');
+		expect(member.encryptionPublicKey).toBe('epk-abc123');
+		expect(member.projectId).toBe(project.id);
 	});
 
-	it('enforces unique signingPublicKey on user', async () => {
+	it('enforces unique signingPublicKey on member', async () => {
 		const { db } = testDb;
-		await db.user.create({
-			data: { signingPublicKey: 'same-spk', encryptionPublicKey: 'epk-1', encryptedName: 'a', encryptedContact: 'b' }
+		const project = await db.project.create({ data: { name: 'Unique Key Project' } });
+		await db.member.create({
+			data: {
+				projectId: project.id,
+				signingPublicKey: 'same-spk',
+				encryptionPublicKey: 'epk-1',
+				encryptedName: 'a',
+				encryptedContact: 'b',
+				role: 'SUBMITTER'
+			}
 		});
 
 		await expect(
-			db.user.create({
-				data: { signingPublicKey: 'same-spk', encryptionPublicKey: 'epk-2', encryptedName: 'c', encryptedContact: 'd' }
+			db.member.create({
+				data: {
+					projectId: project.id,
+					signingPublicKey: 'same-spk',
+					encryptionPublicKey: 'epk-2',
+					encryptedName: 'c',
+					encryptedContact: 'd',
+					role: 'SUBMITTER'
+				}
 			})
 		).rejects.toThrow();
 	});
 
-	it('cascades deletion from project to memberships', async () => {
+	it('cascades deletion from project to members', async () => {
 		const { db } = testDb;
 		const project = await db.project.create({ data: { name: 'Cascade Project' } });
-		const user = await db.user.create({
-			data: { signingPublicKey: 'spk-cascade', encryptionPublicKey: 'epk-cascade', encryptedName: 'n', encryptedContact: 'c' }
-		});
-		await db.membership.create({
-			data: { userId: user.id, projectId: project.id, role: 'SUBMITTER' }
+		const member = await db.member.create({
+			data: {
+				projectId: project.id,
+				signingPublicKey: 'spk-cascade',
+				encryptionPublicKey: 'epk-cascade',
+				encryptedName: 'n',
+				encryptedContact: 'c',
+				role: 'SUBMITTER'
+			}
 		});
 
 		await db.project.delete({ where: { id: project.id } });
 
-		const memberships = await db.membership.findMany({ where: { userId: user.id } });
-		expect(memberships).toHaveLength(0);
+		const found = await db.member.findUnique({ where: { id: member.id } });
+		expect(found).toBeNull();
 	});
 
-	it('rejects a membership referencing a non-existent user', async () => {
+	it('rejects a member referencing a non-existent project', async () => {
 		const { db } = testDb;
-		const project = await db.project.create({ data: { name: 'FK Project' } });
 
 		await expect(
-			db.membership.create({
-				data: { userId: 'does-not-exist', projectId: project.id, role: 'SUBMITTER' }
+			db.member.create({
+				data: {
+					projectId: 'does-not-exist',
+					signingPublicKey: 'spk-fk',
+					encryptionPublicKey: 'epk-fk',
+					encryptedName: 'n',
+					encryptedContact: 'c',
+					role: 'SUBMITTER'
+				}
 			})
 		).rejects.toThrow();
 	});

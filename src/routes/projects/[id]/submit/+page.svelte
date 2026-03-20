@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import TypedSubmissionForm from '$lib/components/TypedSubmissionForm.svelte';
+	import PrivacyInfoModal from '$lib/components/PrivacyInfoModal.svelte';
 	import {
 		generateSymmetricKey,
 		encryptSymmetric,
@@ -12,10 +13,11 @@
 		stringToJwk,
 		sign
 	} from '$lib/crypto';
-	import { loadStoredKeys } from '$lib/client/key-store';
+	import { loadMembershipForProject } from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
 	import type { SubmissionType } from '$lib/api-types';
 	import type { PageData } from './$types';
+	import * as m from '$lib/paraglide/messages';
 
 	let { data }: { data: PageData } = $props();
 
@@ -24,16 +26,18 @@
 	let submitError = $state('');
 	let submissionId = $state('');
 	let uploadProgress = $state('');
+	let privacyOpen = $state(false);
 
 	let userBundle: Awaited<ReturnType<typeof importUserKeyBundleJwk>> | null = null;
 	let userEncryptionPublicKeyJwk: string = '';
 
 	onMount(async () => {
-		const stored = loadStoredKeys();
-		if (!stored) {
-			window.location.href = `/auth?next=/projects/${data.projectId}/submit`;
+		const membership = loadMembershipForProject(data.projectId);
+		if (!membership) {
+			window.location.href = `/auth?projectId=${data.projectId}&next=/projects/${data.projectId}/submit`;
 			return;
 		}
+		const stored = membership.bundle;
 		userBundle = await importUserKeyBundleJwk(stored);
 		userEncryptionPublicKeyJwk = JSON.stringify(stored.encryptionPublicKey);
 		mode = 'form';
@@ -131,6 +135,10 @@
 	}
 </script>
 
+<svelte:head><title>Witness – Submit</title></svelte:head>
+
+<PrivacyInfoModal open={privacyOpen} onclose={() => (privacyOpen = false)} />
+
 <div>
 	{#if mode === 'loading'}
 		<div class="flex justify-center">
@@ -139,6 +147,11 @@
 
 	{:else if mode === 'form'}
 		<div class="mx-auto max-w-xl">
+			<div class="flex justify-end mb-2">
+				<button class="btn btn-ghost btn-xs" onclick={() => (privacyOpen = true)}>
+					{m.privacy_help_btn()}
+				</button>
+			</div>
 			<TypedSubmissionForm formFields={data.formFields} onsubmit={handleSubmit} error={submitError} />
 		</div>
 

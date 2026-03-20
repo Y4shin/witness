@@ -16,7 +16,7 @@ export interface CreateInviteData {
 	maxUses?: number | null;
 	expiresAt?: Date | null;
 	/** Null for admin-generated links. */
-	createdBy?: string | null;
+	createdByMember?: string | null;
 	creatorSignature?: string | null;
 }
 
@@ -106,7 +106,7 @@ export async function createInvite(data: CreateInviteData, db: PrismaClient) {
 			role: data.role,
 			maxUses: data.maxUses ?? null,
 			expiresAt: data.expiresAt ?? null,
-			createdBy: data.createdBy ?? null,
+			createdByMember: data.createdByMember ?? null,
 			creatorSignature: data.creatorSignature ?? null
 		}
 	});

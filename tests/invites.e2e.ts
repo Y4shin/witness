@@ -79,7 +79,9 @@ test.describe('invite link flows', () => {
 
 		await page.goto(`/invite/${token}`);
 		await expect(page).toHaveURL(new RegExp(`/auth\\?projectId=${projectId}`));
-		await expect(page.locator('h1')).toContainText('Create account');
+		// Auth page shows onboarding privacy screen first; click through to register form
+		await page.getByRole('button', { name: 'Understood, continue' }).click();
+		await expect(page.locator('h1')).toContainText('Create your account');
 	});
 
 	// ── /invite/[token] page — non-happy path ─────────────────────────────

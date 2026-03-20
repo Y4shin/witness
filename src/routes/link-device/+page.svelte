@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { deriveKeyFromPassphrase, encryptSymmetric, decryptSymmetric, decode } from '$lib/crypto';
-	import { loadStoredKeys, saveKeys } from '$lib/client/key-store';
+	import { loadMemberships, hasMemberships, saveMembership } from '$lib/client/key-store';
 	import QrCode from '$lib/components/QrCode.svelte';
-	import type { UserKeyBundleJwk } from '$lib/crypto/keys';
+	import type { StoredMembership } from '$lib/client/key-store';
 
 	export const ssr = false;
 
@@ -37,8 +37,7 @@
 	let importing = $state(false);
 
 	onMount(() => {
-		const stored = loadStoredKeys();
-		mode = stored ? 'ready' : 'nokeys';
+		mode = hasMemberships() ? 'ready' : 'nokeys';
 	});
 
 	// ── link tab handlers ─────────────────────────────────────────────────
@@ -51,10 +50,10 @@
 
 		generating = true;
 		try {
-			const stored = loadStoredKeys()!;
+			const memberships = loadMemberships();
 			const { key, saltB64 } = await deriveKeyFromPassphrase(linkPassphrase);
-			const encrypted = await encryptSymmetric(key, new TextEncoder().encode(JSON.stringify(stored)));
-			const fragment = btoa(JSON.stringify({ v: 1, salt: saltB64, encrypted }))
+			const encrypted = await encryptSymmetric(key, new TextEncoder().encode(JSON.stringify(memberships)));
+			const fragment = btoa(JSON.stringify({ v: 2, salt: saltB64, encrypted }))
 				.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 			importUrl = `${window.location.origin}/import#${fragment}`;
 			linkStep = 'generated';
@@ -72,15 +71,15 @@
 
 		exporting = true;
 		try {
-			const stored = loadStoredKeys()!;
+			const memberships = loadMemberships();
 			const { key, saltB64 } = await deriveKeyFromPassphrase(exportPassphrase);
-			const encrypted = await encryptSymmetric(key, new TextEncoder().encode(JSON.stringify(stored)));
-			const fileData = JSON.stringify({ v: 1, salt: saltB64, encrypted }, null, 2);
+			const encrypted = await encryptSymmetric(key, new TextEncoder().encode(JSON.stringify(memberships)));
+			const fileData = JSON.stringify({ v: 2, salt: saltB64, encrypted }, null, 2);
 			const blob = new Blob([fileData], { type: 'application/json' });
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement('a');
 			a.href = url;
-			a.download = 'reporting-tool-keys.json';
+			a.download = 'witness-backup.json';
 			a.click();
 			URL.revokeObjectURL(url);
 		} catch { exportError = 'Export failed'; }
@@ -92,7 +91,7 @@
 	async function handleImport(e: SubmitEvent) {
 		e.preventDefault();
 		importError = '';
-		if (!importFile) { importError = 'Please select a key file'; return; }
+		if (!importFile) { importError = 'Please select a backup file'; return; }
 
 		importing = true;
 		try {
@@ -102,23 +101,31 @@
 				parsed = JSON.parse(text) as typeof parsed;
 				if (!parsed.v || !parsed.salt || !parsed.encrypted) throw new Error('missing fields');
 			} catch {
-				importError = 'Invalid key file — missing required fields';
+				importError = 'Invalid backup file — missing required fields';
+				return;
+			}
+
+			if (parsed.v === 1) {
+				importError = 'Legacy backup (v1) cannot be restored without project context. Please re-register using your invite link.';
 				return;
 			}
 
 			const saltBytes = decode(parsed.salt);
 			const { key } = await deriveKeyFromPassphrase(importPassphrase, { salt: saltBytes });
 
-			let keyBundleJwk: UserKeyBundleJwk;
+			let memberships: Record<string, StoredMembership>;
 			try {
 				const plaintext = await decryptSymmetric(key, parsed.encrypted);
-				keyBundleJwk = JSON.parse(new TextDecoder().decode(plaintext)) as UserKeyBundleJwk;
+				memberships = JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, StoredMembership>;
 			} catch {
 				importError = 'Wrong passphrase — decryption failed';
 				return;
 			}
 
-			saveKeys(keyBundleJwk);
+			// Merge imported memberships (don't overwrite existing)
+			for (const [projectId, m] of Object.entries(memberships)) {
+				saveMembership(projectId, m.bundle, m.projectName, m.role);
+			}
 			importSuccess = true;
 		} catch (err) {
 			importError = err instanceof Error ? err.message : 'Import failed';
@@ -128,7 +135,7 @@
 	}
 </script>
 
-<svelte:head><title>Key management</title></svelte:head>
+<svelte:head><title>Witness – Key Management</title></svelte:head>
 
 <div class="mx-auto max-w-lg p-6 flex flex-col gap-6">
 	<div>
@@ -141,7 +148,7 @@
 
 	{:else if mode === 'nokeys'}
 		<div role="alert" class="alert alert-warning">
-			<span>No keys found. Please register or log in first.</span>
+			<span>No memberships found. Please join a project first.</span>
 		</div>
 
 	{:else}
@@ -152,7 +159,7 @@
 		</div>
 
 		{#if activeTab === 'link'}
-			<p class="text-base-content/60 text-sm">Generate a QR link to securely transfer your keys to another device in real-time.</p>
+			<p class="text-base-content/60 text-sm">Generate a QR link to securely transfer your memberships to another device in real-time.</p>
 
 			{#if linkStep === 'form'}
 				<form class="flex flex-col gap-4" onsubmit={handleGenerateLink}>
@@ -184,7 +191,7 @@
 			{/if}
 
 		{:else if activeTab === 'export'}
-			<p class="text-base-content/60 text-sm">Download an encrypted backup of your keys. Store the file safely — you will need the passphrase to restore it.</p>
+			<p class="text-base-content/60 text-sm">Download an encrypted backup of all your project memberships. Store the file safely — you will need the passphrase to restore it.</p>
 			<form class="flex flex-col gap-4" onsubmit={handleExport}>
 				<label class="flex flex-col gap-1">
 					<span class="label-text font-medium">Passphrase</span>
@@ -202,16 +209,19 @@
 			</form>
 
 		{:else if activeTab === 'import'}
-			<p class="text-base-content/60 text-sm">Restore keys from a previously exported backup file.</p>
+			<p class="text-base-content/60 text-sm">Restore memberships from a previously exported backup file.</p>
 			{#if importSuccess}
-				<div role="status" class="alert alert-success"><span>Keys imported successfully! Your existing session remains active.</span></div>
+				<div role="status" class="alert alert-success">
+					<span>Memberships imported successfully!</span>
+					<a href="/dashboard" class="btn btn-sm btn-ghost ml-2">Go to dashboard</a>
+				</div>
 			{:else}
 				<form class="flex flex-col gap-4" onsubmit={handleImport}>
 					<label class="flex flex-col gap-1">
-						<span class="label-text font-medium">Key backup file (.json)</span>
+						<span class="label-text font-medium">Backup file (.json)</span>
 						<input type="file" accept=".json,application/json" class="file-input file-input-bordered file-input-sm"
 							onchange={(e) => importFile = (e.target as HTMLInputElement).files?.[0] ?? null}
-							aria-label="Key backup file" data-testid="import-file-input" />
+							aria-label="Backup file" data-testid="import-file-input" />
 					</label>
 					<label class="flex flex-col gap-1">
 						<span class="label-text font-medium">Passphrase</span>

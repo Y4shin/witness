@@ -83,16 +83,18 @@ test.describe('admin console', () => {
 	test('deleting a project removes it from the list', async ({ page }) => {
 		await loginAsAdmin(page);
 
-		// Create a project to delete
-		await createProject(page, 'To Be Deleted');
-		const row = page.locator('li', { hasText: 'To Be Deleted' });
+		// Use a unique name to avoid matching stale rows from prior test runs
+		const uniqueName = `To Be Deleted ${Date.now()}`;
+		await createProject(page, uniqueName);
+		const row = page.locator('li', { hasText: uniqueName });
 		await expect(row).toBeVisible();
 
-		// Click delete, then confirm — scoped to the specific row
+		// Click delete, wait for confirm to appear, then confirm — scoped to the specific row
 		await row.locator('[data-testid=delete-project]').click();
+		await expect(row.locator('[data-testid=confirm-delete-project]')).toBeVisible({ timeout: 5000 });
 		await row.locator('[data-testid=confirm-delete-project]').click();
 
-		await expect(page.locator('li', { hasText: 'To Be Deleted' })).not.toBeVisible();
+		await expect(page.locator('li', { hasText: uniqueName })).not.toBeVisible();
 	});
 
 	// ── deleteProject — non-happy path ────────────────────────────────────

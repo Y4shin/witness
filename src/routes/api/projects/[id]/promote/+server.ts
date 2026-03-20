@@ -8,27 +8,22 @@ import type { PromoteRequest, PromoteResponse } from '$lib/api-types';
  * POST /api/projects/[id]/promote
  *
  * Promotes a SUBMITTER to MODERATOR.
- * The caller must be an MODERATOR. They supply the project private key
- * already encrypted for the target user's public key.
+ * The caller must be a MODERATOR. They supply the project private key
+ * already encrypted for the target member's public key.
  *
  * Returns:
  *   - 200 { ok: true } on success
  *   - 401 if not authenticated
- *   - 403 if caller is not an MODERATOR
- *   - 404 if target user is not a member of this project
- *   - 409 if target user is already an MODERATOR
+ *   - 403 if caller is not a MODERATOR
+ *   - 404 if target member is not a member of this project
+ *   - 409 if target member is already a MODERATOR
  */
 export const POST: RequestHandler = async ({ request, params, locals }) => {
-	if (!locals.user) throw error(401, 'Authentication required');
+	if (!locals.member) throw error(401, 'Authentication required');
+	if (locals.member.projectId !== params.id) throw error(403, 'Not a member of this project');
+	if (locals.member.role !== 'MODERATOR') throw error(403, 'Only moderators can promote members');
 
 	const { id: projectId } = params;
-
-	// Caller must be an moderator
-	const callerMembership = await db.membership.findUnique({
-		where: { userId_projectId: { userId: locals.user.id, projectId } }
-	});
-	if (!callerMembership) throw error(403, 'Not a member of this project');
-	if (callerMembership.role !== 'MODERATOR') throw error(403, 'Only moderators can promote members');
 
 	let body: unknown;
 	try {
@@ -38,29 +33,27 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 	}
 
 	const b = body as Record<string, unknown>;
-	if (typeof b.targetUserId !== 'string' || !b.targetUserId)
-		throw error(400, 'targetUserId is required');
+	if (typeof b.targetMemberId !== 'string' || !b.targetMemberId)
+		throw error(400, 'targetMemberId is required');
 	if (typeof b.encryptedProjectPrivateKey !== 'string' || !b.encryptedProjectPrivateKey)
 		throw error(400, 'encryptedProjectPrivateKey is required');
 
-	const { targetUserId, encryptedProjectPrivateKey } = b as PromoteRequest;
+	const { targetMemberId, encryptedProjectPrivateKey } = b as PromoteRequest;
 
 	// Target must be a member of this project
-	const targetMembership = await db.membership.findUnique({
-		where: { userId_projectId: { userId: targetUserId, projectId } }
+	const target = await db.member.findUnique({
+		where: { id: targetMemberId }
 	});
-	if (!targetMembership) throw error(404, 'Target user is not a member of this project');
+	if (!target || target.projectId !== projectId) throw error(404, 'Target member not found in this project');
+	if (target.role === 'MODERATOR') throw error(409, 'Member is already a moderator');
 
-	// Target must be a submitter (cannot promote an existing moderator)
-	if (targetMembership.role === 'MODERATOR') throw error(409, 'User is already an moderator');
-
-	await db.membership.update({
-		where: { userId_projectId: { userId: targetUserId, projectId } },
+	await db.member.update({
+		where: { id: targetMemberId },
 		data: { role: 'MODERATOR', encryptedProjectPrivateKey }
 	});
 
 	logger.info(
-		{ promotedBy: locals.user.id, promotedUser: targetUserId, projectId },
+		{ promotedBy: locals.member.id, promotedMember: targetMemberId, projectId },
 		'Submitter promoted to moderator'
 	);
 

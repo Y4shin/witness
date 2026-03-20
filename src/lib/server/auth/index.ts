@@ -33,7 +33,7 @@ export async function issueChallenge(db: PrismaClient): Promise<string> {
 }
 
 export interface VerifyResult {
-	userId: string;
+	memberId: string;
 	token: string;
 }
 
@@ -41,7 +41,7 @@ export interface VerifyResult {
  * Validates a challenge-response:
  * 1. Looks up and consumes the nonce (single-use).
  * 2. Checks it has not expired.
- * 3. Finds the user by their signing public key.
+ * 3. Finds the member by their signing public key.
  * 4. Verifies the ECDSA signature over the nonce.
  * 5. Creates a new session and returns the token.
  *
@@ -73,9 +73,23 @@ export async function verifyChallenge(body: unknown, db: PrismaClient): Promise<
 		throw new AuthError(401, 'Invalid or expired nonce');
 	}
 
-	// Look up user
-	const user = await db.user.findUnique({ where: { signingPublicKey } });
-	if (!user) {
+	// Normalize signingPublicKey to canonical (sorted-key) JSON before lookup
+	let canonicalSpk: string;
+	try {
+		canonicalSpk = JSON.stringify(
+			Object.fromEntries(
+				Object.entries(JSON.parse(signingPublicKey) as Record<string, unknown>).sort(([a], [b]) =>
+					a.localeCompare(b)
+				)
+			)
+		);
+	} catch {
+		throw new AuthError(401, 'Unknown public key');
+	}
+
+	// Look up member by signing public key
+	const member = await db.member.findUnique({ where: { signingPublicKey: canonicalSpk } });
+	if (!member) {
 		logger.warn({}, 'Challenge rejected: unknown signing key');
 		throw new AuthError(401, 'Unknown public key');
 	}
@@ -86,16 +100,16 @@ export async function verifyChallenge(body: unknown, db: PrismaClient): Promise<
 		const publicKey = await importEcdsaPublicKey(stringToJwk(signingPublicKey));
 		valid = await ecdsaVerify(publicKey, signature, new TextEncoder().encode(nonce));
 	} catch (err) {
-		logger.warn({ err, userId: user.id }, 'Signature verification error');
+		logger.warn({ err, memberId: member.id }, 'Signature verification error');
 		throw new AuthError(401, 'Signature verification failed');
 	}
 
 	if (!valid) {
-		logger.warn({ userId: user.id }, 'Challenge rejected: invalid signature');
+		logger.warn({ memberId: member.id }, 'Challenge rejected: invalid signature');
 		throw new AuthError(401, 'Invalid signature');
 	}
 
-	const token = await createSession(user.id, db);
-	logger.info({ userId: user.id }, 'Auth verified, session created');
-	return { userId: user.id, token };
+	const token = await createSession(member.id, db);
+	logger.info({ memberId: member.id }, 'Auth verified, session created');
+	return { memberId: member.id, token };
 }

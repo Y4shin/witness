@@ -10,7 +10,7 @@ import { db } from '$lib/server/db';
 
 const handleSession: Handle = async ({ event, resolve }) => {
 	const token = event.cookies.get(SESSION_COOKIE_NAME);
-	event.locals.user = await validateSession(token, db);
+	event.locals.member = await validateSession(token, db);
 	return resolve(event);
 };
 

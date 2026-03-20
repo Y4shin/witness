@@ -12,7 +12,7 @@
 		importUserKeyBundleJwk,
 		stringToJwk
 	} from '$lib/crypto';
-	import { loadStoredKeys } from '$lib/client/key-store';
+	import { loadMembershipForProject } from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
 	import type { EncryptedKey } from '$lib/crypto/asymmetric';
 	import type { MemberRecord } from '$lib/api-types';
@@ -24,20 +24,20 @@
 	let mode = $state<PageMode>('loading');
 	let pageError = $state('');
 	let members = $state<MemberRecord[]>([]);
-	let promoting = $state<string | null>(null); // userId being promoted
+	let promoting = $state<string | null>(null); // memberId being promoted
 	let promoteError = $state('');
 
 	let projectPrivateKey: CryptoKey | null = null;
 
 	onMount(async () => {
-		const stored = loadStoredKeys();
-		if (!stored) {
-			window.location.href = `/auth?next=/projects/${data.projectId}/members`;
+		const membership = loadMembershipForProject(data.projectId);
+		if (!membership) {
+			window.location.href = `/auth?projectId=${data.projectId}&next=/projects/${data.projectId}/members`;
 			return;
 		}
 
 		try {
-			const userBundle = await importUserKeyBundleJwk(stored);
+			const userBundle = await importUserKeyBundleJwk(membership.bundle);
 
 			// Decrypt the project private key (needed for promotion)
 			if (data.encryptedProjectPrivateKey) {
@@ -60,17 +60,17 @@
 		}
 	});
 
-	async function handlePromote(targetUserId: string, targetEncryptionPublicKey: string) {
+	async function handlePromote(targetMemberId: string, targetEncryptionPublicKey: string) {
 		if (!projectPrivateKey) {
 			promoteError = 'Project private key not available — cannot promote';
 			return;
 		}
 
-		promoting = targetUserId;
+		promoting = targetMemberId;
 		promoteError = '';
 
 		try {
-			// Re-encrypt project private key for the target user
+			// Re-encrypt project private key for the target member
 			const pkcs8 = await exportPrivateKeyPkcs8(projectPrivateKey);
 			const symKey = await generateSymmetricKey();
 			const targetPubKey = await importEcdhPublicKey(stringToJwk(targetEncryptionPublicKey));
@@ -84,11 +84,11 @@
 				key: encryptedSymKey
 			});
 
-			await api.members.promote(data.projectId, { targetUserId, encryptedProjectPrivateKey });
+			await api.members.promote(data.projectId, { targetMemberId, encryptedProjectPrivateKey });
 
 			// Update local state
 			members = members.map((m) =>
-				m.userId === targetUserId ? { ...m, role: 'MODERATOR' as const } : m
+				m.memberId === targetMemberId ? { ...m, role: 'MODERATOR' as const } : m
 			);
 		} catch (err) {
 			promoteError =
@@ -98,6 +98,8 @@
 		}
 	}
 </script>
+
+<svelte:head><title>Witness – Members</title></svelte:head>
 
 <div>
 	{#if mode === 'loading'}
@@ -124,16 +126,16 @@
 				<table class="table">
 					<thead>
 						<tr>
-							<th>User ID</th>
+							<th>Member ID</th>
 							<th>Role</th>
 							<th>Joined</th>
 							<th></th>
 						</tr>
 					</thead>
 					<tbody>
-						{#each members as member (member.userId)}
+						{#each members as member (member.memberId)}
 							<tr>
-								<td class="font-mono text-xs">{member.userId}</td>
+								<td class="font-mono text-xs">{member.memberId}</td>
 								<td>
 									<span class="badge {member.role === 'MODERATOR' ? 'badge-primary' : 'badge-ghost'}">
 										{member.role}
@@ -141,14 +143,14 @@
 								</td>
 								<td class="text-xs opacity-60">{new Date(member.joinedAt).toLocaleDateString()}</td>
 								<td>
-									{#if member.role === 'SUBMITTER' && member.userId !== data.currentUserId}
+									{#if member.role === 'SUBMITTER' && member.memberId !== data.currentMemberId}
 										<button
 											class="btn btn-xs btn-outline"
-											disabled={promoting === member.userId}
-											onclick={() => handlePromote(member.userId, member.encryptionPublicKey)}
-											aria-label={`Promote ${member.userId} to moderator`}
+											disabled={promoting === member.memberId}
+											onclick={() => handlePromote(member.memberId, member.encryptionPublicKey)}
+											aria-label={`Promote ${member.memberId} to moderator`}
 										>
-											{#if promoting === member.userId}
+											{#if promoting === member.memberId}
 												<span class="loading loading-spinner loading-xs"></span>
 											{:else}
 												Promote

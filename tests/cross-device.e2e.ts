@@ -56,37 +56,34 @@ test.describe('cross-device linking', () => {
 
 	test('generate link then import with correct passphrase succeeds', async ({
 		page,
-		request,
 		browser
 	}) => {
 		const keys = await generateUserKeys();
 
-		// Seed user in DB
-		const userRes = await request.post('/api/_test/seed', {
-			data: {
-				type: 'user',
-				signingPublicKey: JSON.stringify(keys.signingPublicKey),
-				encryptionPublicKey: JSON.stringify(keys.encryptionPublicKey)
+		// Store keys in rt:memberships format (no DB seed needed — cross-device is client-side only)
+		const fakeProjectId = crypto.randomUUID();
+		const memberships = {
+			[fakeProjectId]: {
+				bundle: {
+					signingPublicKey: keys.signingPublicKey,
+					signingPrivateKey: keys.signingPrivateKey,
+					encryptionPublicKey: keys.encryptionPublicKey,
+					encryptionPrivateKey: keys.encryptionPrivateKey
+				},
+				projectName: 'Cross-Device Test Project',
+				role: 'SUBMITTER'
 			}
-		});
-		expect(userRes.status()).toBe(200);
-
-		// Store keys in page A's localStorage and navigate to link-device
-		const keyBundle = {
-			signingPublicKey: keys.signingPublicKey,
-			signingPrivateKey: keys.signingPrivateKey,
-			encryptionPublicKey: keys.encryptionPublicKey,
-			encryptionPrivateKey: keys.encryptionPrivateKey
 		};
+
 		await page.goto('/link-device');
-		await page.evaluate((bundle) => {
-			localStorage.setItem('rt:keys', JSON.stringify(bundle));
-		}, keyBundle);
+		await page.evaluate((data) => {
+			localStorage.setItem('rt:memberships', JSON.stringify(data));
+		}, memberships);
 		await page.reload();
 		await page.waitForLoadState('networkidle');
 
 		// Fill in passphrase and generate
-		await page.getByLabel('Passphrase').fill('correct-horse-battery-staple');
+		await page.getByLabel('Passphrase', { exact: true }).fill('correct-horse-battery-staple');
 		await page.getByLabel('Confirm passphrase').fill('correct-horse-battery-staple');
 		await page.getByTestId('generate-link-btn').click();
 
@@ -108,44 +105,45 @@ test.describe('cross-device linking', () => {
 		await page2.getByTestId('passphrase-input').fill('correct-horse-battery-staple');
 		await page2.getByTestId('import-btn').click();
 
-		// Should redirect to dashboard
-		await page2.waitForURL('/dashboard', { timeout: 15000 });
+		// Import page shows success screen with "Go to dashboard" link (no auto-redirect)
+		await expect(page2.getByRole('link', { name: 'Go to dashboard' })).toBeVisible({ timeout: 15000 });
 
-		// Keys should be in localStorage on page 2
-		const storedKeys = await page2.evaluate(() => localStorage.getItem('rt:keys'));
-		expect(storedKeys).toBeTruthy();
-		const parsed = JSON.parse(storedKeys!);
-		expect(parsed.signingPublicKey).toBeDefined();
-		expect(parsed.encryptionPrivateKey).toBeDefined();
+		// Keys should be in rt:memberships on page 2
+		const storedMemberships = await page2.evaluate(() => localStorage.getItem('rt:memberships'));
+		expect(storedMemberships).toBeTruthy();
+		const parsed = JSON.parse(storedMemberships!);
+		const projectIds = Object.keys(parsed);
+		expect(projectIds.length).toBeGreaterThan(0);
+		const firstMembership = parsed[projectIds[0]];
+		expect(firstMembership.bundle.signingPublicKey).toBeDefined();
+		expect(firstMembership.bundle.encryptionPrivateKey).toBeDefined();
 
 		await ctx2.close();
 	});
 
-	test('wrong passphrase shows error and does not store keys', async ({ page, request }) => {
+	test('wrong passphrase shows error and does not store keys', async ({ page }) => {
 		const keys = await generateUserKeys();
 
-		const userRes = await request.post('/api/_test/seed', {
-			data: {
-				type: 'user',
-				signingPublicKey: JSON.stringify(keys.signingPublicKey),
-				encryptionPublicKey: JSON.stringify(keys.encryptionPublicKey)
+		const fakeProjectId = crypto.randomUUID();
+		const memberships = {
+			[fakeProjectId]: {
+				bundle: {
+					signingPublicKey: keys.signingPublicKey,
+					signingPrivateKey: keys.signingPrivateKey,
+					encryptionPublicKey: keys.encryptionPublicKey,
+					encryptionPrivateKey: keys.encryptionPrivateKey
+				},
+				projectName: 'Cross-Device Test Project',
+				role: 'SUBMITTER'
 			}
-		});
-		expect(userRes.status()).toBe(200);
-
-		const keyBundle = {
-			signingPublicKey: keys.signingPublicKey,
-			signingPrivateKey: keys.signingPrivateKey,
-			encryptionPublicKey: keys.encryptionPublicKey,
-			encryptionPrivateKey: keys.encryptionPrivateKey
 		};
 		await page.goto('/link-device');
-		await page.evaluate((bundle) => {
-			localStorage.setItem('rt:keys', JSON.stringify(bundle));
-		}, keyBundle);
+		await page.evaluate((data) => {
+			localStorage.setItem('rt:memberships', JSON.stringify(data));
+		}, memberships);
 		await page.reload();
 
-		await page.getByLabel('Passphrase').fill('correct-passphrase-12345');
+		await page.getByLabel('Passphrase', { exact: true }).fill('correct-passphrase-12345');
 		await page.getByLabel('Confirm passphrase').fill('correct-passphrase-12345');
 		await page.getByTestId('generate-link-btn').click();
 		const importUrl = await page.getByTestId('import-url').inputValue({ timeout: 10000 });
@@ -164,8 +162,8 @@ test.describe('cross-device linking', () => {
 		expect(alertText).toMatch(/wrong passphrase|decryption failed/i);
 
 		// Keys should NOT be stored
-		const storedKeys = await page2.evaluate(() => localStorage.getItem('rt:keys'));
-		expect(storedKeys).toBeNull();
+		const storedMemberships = await page2.evaluate(() => localStorage.getItem('rt:memberships'));
+		expect(storedMemberships).toBeNull();
 
 		await ctx2.close();
 	});

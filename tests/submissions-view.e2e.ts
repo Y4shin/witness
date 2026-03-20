@@ -76,12 +76,6 @@ async function setupAndAuthSubmitter(
 ) {
 	const keys = await generateUserKeys();
 
-	const userRes = await request.post('/api/_test/seed', {
-		data: { type: 'user', signingPublicKey: keys.signingPublicKey, encryptionPublicKey: keys.encryptionPublicKey }
-	});
-	expect(userRes.status()).toBe(200);
-	const { userId } = await userRes.json();
-
 	let projectId = existingProjectId;
 	let projectPublicKey = existingProjectPublicKey;
 	let projectPrivateKey: CryptoKey | undefined;
@@ -99,9 +93,11 @@ async function setupAndAuthSubmitter(
 		projectId = (await projRes.json()).projectId;
 	}
 
-	await request.post('/api/_test/seed', {
-		data: { type: 'membership', userId, projectId, role: 'SUBMITTER' }
+	const memberRes = await request.post('/api/_test/seed', {
+		data: { type: 'member', projectId, signingPublicKey: keys.signingPublicKey, encryptionPublicKey: keys.encryptionPublicKey, role: 'SUBMITTER' }
 	});
+	expect(memberRes.status()).toBe(200);
+	const { memberId } = await memberRes.json();
 
 	// Challenge/verify
 	const { nonce } = await (await request.get('/api/auth/challenge')).json();
@@ -114,7 +110,7 @@ async function setupAndAuthSubmitter(
 		data: { signingPublicKey: keys.signingPublicKey, nonce, signature: b64url(new Uint8Array(sig)) }
 	});
 
-	return { keys, projectId: projectId!, projectPublicKey: projectPublicKey!, projectPrivateKey, userId };
+	return { keys, projectId: projectId!, projectPublicKey: projectPublicKey!, projectPrivateKey, memberId };
 }
 
 /**
@@ -266,23 +262,19 @@ test.describe('submission views', () => {
 	});
 
 	test('submitter only sees their own submissions (not other users\')', async ({ request }) => {
-		const { keys, projectId, projectPublicKey, userId } = await setupAndAuthSubmitter(request);
+		const { keys, projectId, projectPublicKey } = await setupAndAuthSubmitter(request);
 		const payload = { who: 'user1' };
 		await postSubmission(request, projectPublicKey, keys.encryptionPublicKey, keys.signing.privateKey, projectId, payload);
 
-		// Seed a second user and a raw submission for them (no real crypto needed for count test)
+		// Seed a second member and a raw submission for them (no real crypto needed for count test)
 		const otherKeys = await generateUserKeys();
-		const otherUserRes = await request.post('/api/_test/seed', {
-			data: { type: 'user', signingPublicKey: otherKeys.signingPublicKey, encryptionPublicKey: otherKeys.encryptionPublicKey }
+		const otherMemberRes = await request.post('/api/_test/seed', {
+			data: { type: 'member', projectId, signingPublicKey: otherKeys.signingPublicKey, encryptionPublicKey: otherKeys.encryptionPublicKey, role: 'SUBMITTER' }
 		});
-		const { userId: otherUserId } = await otherUserRes.json();
+		const { memberId: otherMemberId } = await otherMemberRes.json();
 		await request.post('/api/_test/seed', {
-			data: { type: 'membership', userId: otherUserId, projectId, role: 'SUBMITTER' }
+			data: { type: 'submission', projectId, memberId: otherMemberId }
 		});
-		await request.post('/api/_test/seed', {
-			data: { type: 'submission', projectId, userId: otherUserId }
-		});
-		void userId;
 
 		// Re-authenticate as the first submitter (seed requests above didn't change session)
 		// The request fixture still has user1's session — just fetch
@@ -306,15 +298,11 @@ test.describe('submission views', () => {
 		const payload = { secret: 'MODERATOR can read this' };
 		await postSubmission(request, projectPublicKey, subKeys.encryptionPublicKey, subKeys.signing.privateKey, projectId, payload);
 
-		// Step 3: Seed an MODERATOR user with the project private key encrypted for them
+		// Step 3: Seed a MODERATOR member with the project private key encrypted for them
 		const obsKeys = await generateUserKeys();
-		const obsUserRes = await request.post('/api/_test/seed', {
-			data: { type: 'user', signingPublicKey: obsKeys.signingPublicKey, encryptionPublicKey: obsKeys.encryptionPublicKey }
-		});
-		const { userId: obsUserId } = await obsUserRes.json();
 		const encryptedProjectPrivateKey = await buildEncryptedProjectPrivateKey(projectPrivateKey!, obsKeys.encryptionPublicKey);
 		await request.post('/api/_test/seed', {
-			data: { type: 'membership', userId: obsUserId, projectId, role: 'MODERATOR', encryptedProjectPrivateKey }
+			data: { type: 'member', projectId, signingPublicKey: obsKeys.signingPublicKey, encryptionPublicKey: obsKeys.encryptionPublicKey, role: 'MODERATOR', encryptedProjectPrivateKey }
 		});
 
 		// Step 4: Re-authenticate as MODERATOR
@@ -344,15 +332,11 @@ test.describe('submission views', () => {
 		const { keys: sub2Keys } = await setupAndAuthSubmitter(request, projectId, projectPublicKey);
 		await postSubmission(request, projectPublicKey, sub2Keys.encryptionPublicKey, sub2Keys.signing.privateKey, projectId, { n: '2' });
 
-		// Seed MODERATOR + re-auth as MODERATOR
+		// Seed MODERATOR member + re-auth as MODERATOR
 		const obsKeys = await generateUserKeys();
-		const obsUserRes = await request.post('/api/_test/seed', {
-			data: { type: 'user', signingPublicKey: obsKeys.signingPublicKey, encryptionPublicKey: obsKeys.encryptionPublicKey }
-		});
-		const { userId: obsUserId } = await obsUserRes.json();
 		const encryptedProjectPrivateKey = await buildEncryptedProjectPrivateKey(projectPrivateKey!, obsKeys.encryptionPublicKey);
 		await request.post('/api/_test/seed', {
-			data: { type: 'membership', userId: obsUserId, projectId, role: 'MODERATOR', encryptedProjectPrivateKey }
+			data: { type: 'member', projectId, signingPublicKey: obsKeys.signingPublicKey, encryptionPublicKey: obsKeys.encryptionPublicKey, role: 'MODERATOR', encryptedProjectPrivateKey }
 		});
 		await reAuth(request, obsKeys.signingPublicKey, obsKeys.signing.privateKey);
 

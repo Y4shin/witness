@@ -2,14 +2,17 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createSession, validateSession, deleteSession } from './index';
 import { createTestDb, type TestDb } from '$lib/server/db/test-utils';
 
-// Helper: create a user in the test DB
-async function seedUser(db: TestDb['db'], signingPublicKey = 'spk-test') {
-	return db.user.create({
+// Helper: create a project + member in the test DB
+async function seedMember(db: TestDb['db'], signingPublicKey = 'spk-test') {
+	const project = await db.project.create({ data: { name: 'Test Project' } });
+	return db.member.create({
 		data: {
+			projectId: project.id,
 			signingPublicKey,
 			encryptionPublicKey: `epk-${signingPublicKey}`,
 			encryptedName: 'enc-name',
-			encryptedContact: 'enc-contact'
+			encryptedContact: 'enc-contact',
+			role: 'SUBMITTER'
 		}
 	});
 }
@@ -29,9 +32,9 @@ describe('session management', () => {
 
 	it('createSession returns a non-empty token string', async () => {
 		const { db } = testDb;
-		const user = await seedUser(db);
+		const member = await seedMember(db);
 
-		const token = await createSession(user.id, db);
+		const token = await createSession(member.id, db);
 
 		expect(typeof token).toBe('string');
 		expect(token.length).toBeGreaterThan(0);
@@ -39,34 +42,34 @@ describe('session management', () => {
 
 	it('createSession stores the session in the database', async () => {
 		const { db } = testDb;
-		const user = await seedUser(db);
+		const member = await seedMember(db);
 
-		const token = await createSession(user.id, db);
+		const token = await createSession(member.id, db);
 		const session = await db.session.findUnique({ where: { token } });
 
 		expect(session).not.toBeNull();
-		expect(session!.userId).toBe(user.id);
+		expect(session!.memberId).toBe(member.id);
 		expect(session!.expiresAt.getTime()).toBeGreaterThan(Date.now());
 	});
 
-	it('validateSession returns the user for a valid token', async () => {
+	it('validateSession returns the member for a valid token', async () => {
 		const { db } = testDb;
-		const user = await seedUser(db);
-		const token = await createSession(user.id, db);
+		const member = await seedMember(db);
+		const token = await createSession(member.id, db);
 
 		const result = await validateSession(token, db);
 
 		expect(result).not.toBeNull();
-		expect(result!.id).toBe(user.id);
+		expect(result!.id).toBe(member.id);
 		expect(result!.signingPublicKey).toBe('spk-test');
 	});
 
 	it('each createSession call produces a unique token', async () => {
 		const { db } = testDb;
-		const user = await seedUser(db);
+		const member = await seedMember(db);
 
-		const t1 = await createSession(user.id, db);
-		const t2 = await createSession(user.id, db);
+		const t1 = await createSession(member.id, db);
+		const t2 = await createSession(member.id, db);
 
 		expect(t1).not.toBe(t2);
 	});
@@ -91,8 +94,8 @@ describe('session management', () => {
 
 	it('validateSession returns null for a tampered token', async () => {
 		const { db } = testDb;
-		const user = await seedUser(db);
-		const token = await createSession(user.id, db);
+		const member = await seedMember(db);
+		const token = await createSession(member.id, db);
 
 		const result = await validateSession(token + 'tampered', db);
 
@@ -101,13 +104,13 @@ describe('session management', () => {
 
 	it('validateSession returns null and removes an expired session', async () => {
 		const { db } = testDb;
-		const user = await seedUser(db);
+		const member = await seedMember(db);
 
 		// Insert an already-expired session directly
 		const token = 'expired-token-abc';
 		await db.session.create({
 			data: {
-				userId: user.id,
+				memberId: member.id,
 				token,
 				expiresAt: new Date(Date.now() - 1000) // 1 second in the past
 			}
@@ -123,8 +126,8 @@ describe('session management', () => {
 
 	it('validateSession returns null after deleteSession', async () => {
 		const { db } = testDb;
-		const user = await seedUser(db);
-		const token = await createSession(user.id, db);
+		const member = await seedMember(db);
+		const token = await createSession(member.id, db);
 
 		await deleteSession(token, db);
 		const result = await validateSession(token, db);
@@ -139,13 +142,13 @@ describe('session management', () => {
 		await expect(deleteSession('no-such-token', db)).resolves.toBeUndefined();
 	});
 
-	it('validateSession returns null when the associated user has been deleted', async () => {
+	it('validateSession returns null when the associated member has been deleted', async () => {
 		const { db } = testDb;
-		const user = await seedUser(db, 'spk-to-delete');
-		const token = await createSession(user.id, db);
+		const member = await seedMember(db, 'spk-to-delete');
+		const token = await createSession(member.id, db);
 
-		// Cascade delete removes the session along with the user
-		await db.user.delete({ where: { id: user.id } });
+		// Cascade delete removes the session along with the member
+		await db.member.delete({ where: { id: member.id } });
 
 		const result = await validateSession(token, db);
 		expect(result).toBeNull();

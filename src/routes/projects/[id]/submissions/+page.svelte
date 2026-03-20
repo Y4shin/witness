@@ -6,7 +6,7 @@
 		importEcdhPrivateKey,
 		importUserKeyBundleJwk
 	} from '$lib/crypto';
-	import { loadStoredKeys } from '$lib/client/key-store';
+	import { loadMembershipForProject } from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
 	import { openCacheDb, initCacheKey, readCacheEntry, writeCacheEntry } from '$lib/stores/cache';
 	import { SUBMISSION_TYPE_LABELS } from '$lib/submission-types';
@@ -19,7 +19,7 @@
 
 	type DecryptedSubmission = {
 		id: string;
-		userId: string;
+		memberId: string;
 		createdAt: string;
 		type: SubmissionType;
 		archiveUrl: string | null;
@@ -48,14 +48,14 @@
 	const CACHE_KEY = `submissions:${data.projectId}`;
 
 	onMount(async () => {
-		const stored = loadStoredKeys();
-		if (!stored) {
-			window.location.href = `/auth?next=/projects/${data.projectId}/submissions`;
+		const membership = loadMembershipForProject(data.projectId);
+		if (!membership) {
+			window.location.href = `/auth?projectId=${data.projectId}&next=/projects/${data.projectId}/submissions`;
 			return;
 		}
 
 		try {
-			const userBundle = await importUserKeyBundleJwk(stored);
+			const userBundle = await importUserKeyBundleJwk(membership.bundle);
 
 			// Derive cache encryption key and open DB
 			const [cacheDb, cacheKey] = await Promise.all([
@@ -103,11 +103,11 @@
 						}
 						const plaintext = await decryptSymmetric(symKey, s.encryptedPayload);
 						const fields = JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, string>;
-						return { id: s.id, userId: s.userId, createdAt: s.createdAt, type: s.type, archiveUrl: s.archiveUrl, fileCount: s.fileCount, fields };
+						return { id: s.id, memberId: s.memberId, createdAt: s.createdAt, type: s.type, archiveUrl: s.archiveUrl, fileCount: s.fileCount, fields };
 					} catch {
 						return {
 							id: s.id,
-							userId: s.userId,
+							memberId: s.memberId,
 							createdAt: s.createdAt,
 							type: s.type,
 							archiveUrl: s.archiveUrl,
@@ -140,6 +140,8 @@
 		return new Date(iso).toLocaleString();
 	}
 </script>
+
+<svelte:head><title>Witness – Submissions</title></svelte:head>
 
 <div>
 	{#if mode === 'loading'}

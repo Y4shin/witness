@@ -1,4 +1,4 @@
-﻿import { json, error } from '@sveltejs/kit';
+import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { createInvite } from '$lib/server/invites';
@@ -10,7 +10,7 @@ import type { CreateInviteResponse } from '$lib/api-types';
  * role in the target project.
  */
 export const POST: RequestHandler = async ({ request, locals }) => {
-	if (!locals.user) throw error(401, 'Authentication required');
+	if (!locals.member) throw error(401, 'Authentication required');
 
 	let body: unknown;
 	try {
@@ -28,11 +28,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		throw error(400, "role must be 'SUBMITTER' or 'MODERATOR'");
 	}
 
-	// Verify the requester is an MODERATOR in the target project
-	const membership = await db.membership.findUnique({
-		where: { userId_projectId: { userId: locals.user.id, projectId: b.projectId } }
-	});
-	if (!membership || membership.role !== 'MODERATOR') {
+	// Verify the requester is a MODERATOR in the target project
+	if (locals.member.projectId !== b.projectId || locals.member.role !== 'MODERATOR') {
 		throw error(403, 'Only MODERATORs can create invite links');
 	}
 
@@ -50,7 +47,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			role: b.role,
 			maxUses,
 			expiresAt,
-			createdBy: locals.user.id
+			createdByMember: locals.member.id
 		},
 		db
 	);

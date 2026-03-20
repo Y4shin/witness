@@ -35,47 +35,39 @@ model Project {
   publicKey String?  // Null until first MODERATOR claims the project and generates the keypair
   createdAt DateTime @default(now())
 
-  memberships Membership[]
+  members     Member[]
   submissions Submission[]
   formFields  FormField[]
   inviteLinks InviteLink[]
 }
 
-model User {
-  id                  String   @id @default(uuid())
-  signingPublicKey    String   @unique  // ECDSA P-256 JWK — used for challenge-response auth and submission signatures
-  encryptionPublicKey String   @unique  // ECDH P-256 JWK — used for hybrid encryption of symmetric keys
-  encryptedName       String            // Encrypted with project public key
-  encryptedContact    String            // Encrypted with project public key
-  createdAt           DateTime @default(now())
-
-  memberships Membership[]
-  sessions    Session[]
-  submissions Submission[]
-  inviteLinks InviteLink[] // Links created by this user
-}
-
-model Membership {
-  userId                     String
+// Each project membership is an independent cryptographic identity.
+// A single physical person joining N projects produces N unlinked Member rows.
+model Member {
+  id                         String   @id @default(uuid())
   projectId                  String
+  signingPublicKey           String   @unique
+  encryptionPublicKey        String   @unique
+  encryptedName              String   // Encrypted with project public key
+  encryptedContact           String   // Encrypted with project public key
   role                       Role
-  encryptedProjectPrivateKey String?  // Non-null for MODERATORs. Encrypted with the user's public key.
+  encryptedProjectPrivateKey String?  // Non-null for MODERATORs
   joinedAt                   DateTime @default(now())
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@id([userId, projectId])
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sessions    Session[]
+  submissions Submission[]
+  inviteLinks InviteLink[]
 }
 
 model Session {
   id        String   @id @default(uuid())
-  userId    String
+  memberId  String
   token     String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
 }
 
 model Challenge {
@@ -87,7 +79,7 @@ model InviteLink {
   id               String    @id @default(uuid())
   token            String    @unique
   projectId        String
-  createdBy        String?   // Null for admin-generated links
+  createdByMember  String?   // Null for admin-generated links
   creatorSignature String?   // Null for admin-generated links
   role             Role
   maxUses          Int?      // Null = unlimited
@@ -95,14 +87,14 @@ model InviteLink {
   expiresAt        DateTime? // Null = no expiry
   createdAt        DateTime  @default(now())
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  creator User?   @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creatorMember Member? @relation(fields: [createdByMember], references: [id], onDelete: SetNull)
 }
 
 model Submission {
   id                   String         @id @default(uuid())
   projectId            String
-  userId               String
+  memberId             String
   type                 SubmissionType @default(WEBPAGE)
   archiveCandidateUrl  String?        // Plaintext URL submitted for archiving (not sensitive)
   archiveUrl           String?        // URL returned by archive.ph after archiving
@@ -113,7 +105,7 @@ model Submission {
   createdAt            DateTime       @default(now())
 
   project Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  member  Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
   files   SubmissionFile[]
 }
 

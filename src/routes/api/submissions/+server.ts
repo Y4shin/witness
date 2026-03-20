@@ -11,12 +11,12 @@ const VALID_TYPES: SubmissionType[] = ['YOUTUBE_VIDEO', 'WEBPAGE', 'INSTAGRAM_PO
 /**
  * POST /api/submissions
  *
- * Accepts an encrypted submission from an authenticated SUBMITTER.
+ * Accepts an encrypted submission from an authenticated member.
  * Verifies the ECDSA signature over (nonce_bytes || SHA-256(encryptedPayload_bytes))
  * using the challenge-response mechanism, then stores the ciphertext.
  */
 export const POST: RequestHandler = async ({ request, locals }) => {
-	if (!locals.user) throw error(401, 'Authentication required');
+	if (!locals.member) throw error(401, 'Authentication required');
 
 	let body: unknown;
 	try {
@@ -47,11 +47,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const { projectId, type, archiveCandidateUrl, encryptedPayload, encryptedKeyProject, encryptedKeyUser, submitterSignature, nonce } =
 		b as unknown as CreateSubmissionRequest;
 
-	// Verify membership (any role can submit)
-	const membership = await db.membership.findUnique({
-		where: { userId_projectId: { userId: locals.user.id, projectId } }
-	});
-	if (!membership) throw error(403, 'Not a member of this project');
+	// Verify the member belongs to this project
+	if (locals.member.projectId !== projectId) throw error(403, 'Not a member of this project');
 
 	// Validate and consume the nonce
 	const challenge = await db.challenge.findUnique({ where: { nonce } });
@@ -59,7 +56,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		await db.challenge.delete({ where: { nonce } }).catch(() => {});
 	}
 	if (!challenge || challenge.expiresAt < new Date()) {
-		logger.warn({ userId: locals.user.id }, 'Submission rejected: invalid or expired nonce');
+		logger.warn({ memberId: locals.member.id }, 'Submission rejected: invalid or expired nonce');
 		throw error(401, 'Invalid or expired nonce');
 	}
 
@@ -73,14 +70,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	let valid: boolean;
 	try {
-		const publicKey = await importEcdsaPublicKey(stringToJwk(locals.user.signingPublicKey));
+		const publicKey = await importEcdsaPublicKey(stringToJwk(locals.member.signingPublicKey));
 		valid = await verify(publicKey, submitterSignature, message);
 	} catch {
 		throw error(400, 'Signature verification failed');
 	}
 
 	if (!valid) {
-		logger.warn({ userId: locals.user.id }, 'Submission rejected: invalid signature');
+		logger.warn({ memberId: locals.member.id }, 'Submission rejected: invalid signature');
 		throw error(400, 'Invalid signature');
 	}
 
@@ -88,7 +85,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const submission = await db.submission.create({
 		data: {
 			projectId,
-			userId: locals.user.id,
+			memberId: locals.member.id,
 			type,
 			archiveCandidateUrl: archiveCandidateUrl ?? null,
 			encryptedPayload,
@@ -99,7 +96,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	});
 
 	logger.info(
-		{ submissionId: submission.id, projectId, userId: locals.user.id, type },
+		{ submissionId: submission.id, projectId, memberId: locals.member.id, type },
 		'Submission received'
 	);
 
@@ -117,4 +114,3 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	return json({ submissionId: submission.id } satisfies CreateSubmissionResponse, { status: 201 });
 };
-

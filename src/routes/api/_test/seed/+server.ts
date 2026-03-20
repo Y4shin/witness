@@ -1,6 +1,6 @@
-﻿/**
+/**
  * Test-only seed endpoint. Disabled in production (TEST_MODE != 'true').
- * Supports seeding users and projects with known state.
+ * Supports seeding members and projects with known state.
  * Used by Playwright tests to set up test scenarios without a UI.
  */
 import { json, error } from '@sveltejs/kit';
@@ -18,19 +18,30 @@ export const POST: RequestHandler = async ({ request }) => {
 		throw error(400, 'type is required');
 	}
 
-	if (body.type === 'user') {
+	if (body.type === 'member') {
+		if (typeof body.projectId !== 'string') throw error(400, 'projectId is required');
 		if (typeof body.signingPublicKey !== 'string' || typeof body.encryptionPublicKey !== 'string') {
 			throw error(400, 'signingPublicKey and encryptionPublicKey are required');
 		}
-		const user = await db.user.create({
+		// Normalize JWK strings to canonical (sorted-key) form so they match what the browser produces
+		const canonicalize = (s: string) =>
+			JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(s) as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))));
+		const role = body.role === 'SUBMITTER' ? 'SUBMITTER' : 'MODERATOR';
+		const member = await db.member.create({
 			data: {
-				signingPublicKey: body.signingPublicKey,
-				encryptionPublicKey: body.encryptionPublicKey,
+				projectId: body.projectId,
+				signingPublicKey: canonicalize(body.signingPublicKey),
+				encryptionPublicKey: canonicalize(body.encryptionPublicKey),
 				encryptedName: body.encryptedName ?? 'test-enc-name',
-				encryptedContact: body.encryptedContact ?? 'test-enc-contact'
+				encryptedContact: body.encryptedContact ?? 'test-enc-contact',
+				role,
+				encryptedProjectPrivateKey:
+					typeof body.encryptedProjectPrivateKey === 'string'
+						? body.encryptedProjectPrivateKey
+						: null
 			}
 		});
-		return json({ userId: user.id });
+		return json({ memberId: member.id, projectId: member.projectId, role: member.role });
 	}
 
 	if (body.type === 'project') {
@@ -64,31 +75,13 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ inviteId: invite.id, token: invite.token });
 	}
 
-	if (body.type === 'membership') {
-		if (typeof body.userId !== 'string') throw error(400, 'userId is required');
-		if (typeof body.projectId !== 'string') throw error(400, 'projectId is required');
-		const role = body.role === 'SUBMITTER' ? 'SUBMITTER' : 'MODERATOR';
-		const membership = await db.membership.create({
-			data: {
-				userId: body.userId,
-				projectId: body.projectId,
-				role,
-				encryptedProjectPrivateKey:
-					typeof body.encryptedProjectPrivateKey === 'string'
-						? body.encryptedProjectPrivateKey
-						: null
-			}
-		});
-		return json({ userId: membership.userId, projectId: membership.projectId, role: membership.role });
-	}
-
 	if (body.type === 'submission') {
 		if (typeof body.projectId !== 'string') throw error(400, 'projectId is required');
-		if (typeof body.userId !== 'string') throw error(400, 'userId is required');
+		if (typeof body.memberId !== 'string') throw error(400, 'memberId is required');
 		const submission = await db.submission.create({
 			data: {
 				projectId: body.projectId,
-				userId: body.userId,
+				memberId: body.memberId,
 				encryptedPayload: body.encryptedPayload ?? 'test-payload',
 				encryptedKeyProject: body.encryptedKeyProject ?? '{}',
 				encryptedKeyUser: body.encryptedKeyUser ?? '{}',

@@ -36,7 +36,7 @@ async function deriveWrappingKey(
 			name: 'HKDF',
 			hash: 'SHA-256',
 			salt,
-			info: new TextEncoder().encode('reporting-tool-key-wrap')
+			info: new TextEncoder().encode('witness-key-wrap')
 		},
 		hkdfKey,
 		{ name: 'AES-GCM', length: 256 },

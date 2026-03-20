@@ -38,3 +38,4 @@ project.inlang/cache/
 # Claude
 .claude/settings.local.json
 uploads/
+/.direnv

@@ -13,22 +13,16 @@ import type { UploadFileRequest, UploadFileResponse } from '$lib/api-types';
  * The file bytes are already encrypted client-side; the server stores them opaquely.
  */
 export const POST: RequestHandler = async ({ request, locals, params }) => {
-	if (!locals.user) throw error(401, 'Authentication required');
+	if (!locals.member) throw error(401, 'Authentication required');
 
 	const { id: submissionId } = params;
 
-	// Verify submission exists and belongs to this user (or user is a moderator of the project)
-	const submission = await db.submission.findUnique({
-		where: { id: submissionId },
-		include: { project: { include: { memberships: { where: { userId: locals.user.id } } } } }
-	});
+	// Verify submission exists and belongs to this member
+	const submission = await db.submission.findUnique({ where: { id: submissionId } });
 	if (!submission) throw error(404, 'Submission not found');
 
-	const membership = submission.project.memberships[0];
-	if (!membership) throw error(403, 'Not a member of this project');
-
 	// Only the submitter can upload files to their own submission
-	if (submission.userId !== locals.user.id) {
+	if (submission.memberId !== locals.member.id) {
 		throw error(403, 'You can only upload files to your own submissions');
 	}
 

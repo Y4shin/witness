@@ -21,7 +21,7 @@ if (process.env.OTEL_ENABLED === 'true') {
 	const { SimpleLogRecordProcessor } = await import('@opentelemetry/sdk-logs');
 
 	const sdk = new NodeSDK({
-		serviceName: process.env.OTEL_SERVICE_NAME ?? 'reporting-tool',
+		serviceName: process.env.OTEL_SERVICE_NAME ?? 'witness',
 		traceExporter: new OTLPTraceExporter(),
 		logRecordProcessor: new SimpleLogRecordProcessor(new OTLPLogExporter()),
 		instrumentations: [

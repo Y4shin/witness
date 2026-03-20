@@ -65,7 +65,7 @@ export async function deriveIndexedDbKey(privateKeyBytes: Uint8Array): Promise<C
 			name: 'HKDF',
 			hash: 'SHA-256',
 			salt: new Uint8Array(32), // fixed zero salt — key itself is high entropy
-			info: new TextEncoder().encode('reporting-tool-indexeddb')
+			info: new TextEncoder().encode('witness-indexeddb')
 		},
 		hkdfKey,
 		{ name: 'AES-GCM', length: 256 },

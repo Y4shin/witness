@@ -59,12 +59,6 @@ async function wrapKeyFor(symKey: CryptoKey, recipientPublicKeyJwk: string): Pro
 async function setupSubmitter(request: APIRequestContext) {
 	const keys = await generateUserKeys();
 
-	const userRes = await request.post('/api/_test/seed', {
-		data: { type: 'user', signingPublicKey: keys.signingPublicKey, encryptionPublicKey: keys.encryptionPublicKey }
-	});
-	expect(userRes.status()).toBe(200);
-	const { userId } = await userRes.json();
-
 	const projectEcdh = await crypto.subtle.generateKey(
 		{ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']
 	);
@@ -76,7 +70,7 @@ async function setupSubmitter(request: APIRequestContext) {
 	const projectId = (await projRes.json()).projectId as string;
 
 	await request.post('/api/_test/seed', {
-		data: { type: 'membership', userId, projectId, role: 'SUBMITTER' }
+		data: { type: 'member', projectId, signingPublicKey: keys.signingPublicKey, encryptionPublicKey: keys.encryptionPublicKey, role: 'SUBMITTER' }
 	});
 
 	// Authenticate
@@ -115,7 +109,7 @@ async function setupSubmitter(request: APIRequestContext) {
 	});
 	expect(subRes.status()).toBe(201);
 
-	return { keys, projectId, userId };
+	return { keys, projectId };
 }
 
 // ── tests ────────────────────────────────────────────────────────────────────
@@ -124,19 +118,20 @@ test.describe('IndexedDB cold storage', () => {
 	test('submissions are served from cache after API routes are blocked', async ({ page, request }) => {
 		const { keys, projectId } = await setupSubmitter(request);
 
-		// Store the user's key bundle in the page's localStorage so the page can authenticate
-		const keyBundle = {
+		// Store the member's key bundle in rt:memberships format
+		const bundle = {
 			signingPublicKey: JSON.parse(keys.signingPublicKey),
 			signingPrivateKey: await crypto.subtle.exportKey('jwk', keys.signing.privateKey),
 			encryptionPublicKey: JSON.parse(keys.encryptionPublicKey),
 			encryptionPrivateKey: await crypto.subtle.exportKey('jwk', keys.encryption.privateKey)
 		};
+		const memberships = { [projectId]: { bundle, projectName: 'Cache Test Project', role: 'SUBMITTER' } };
 
 		// Navigate to submissions page — this populates the cache
 		await page.goto(`/projects/${projectId}/submissions`);
-		await page.evaluate((bundle) => {
-			localStorage.setItem('rt:keys', JSON.stringify(bundle));
-		}, keyBundle);
+		await page.evaluate((data) => {
+			localStorage.setItem('rt:memberships', JSON.stringify(data));
+		}, memberships);
 
 		// Reload so the page picks up the stored keys
 		await page.reload();
@@ -153,22 +148,23 @@ test.describe('IndexedDB cold storage', () => {
 	test('logout clears in-memory state but cold storage remains', async ({ page, request }) => {
 		const { keys, projectId } = await setupSubmitter(request);
 
-		const keyBundle = {
+		const bundle = {
 			signingPublicKey: JSON.parse(keys.signingPublicKey),
 			signingPrivateKey: await crypto.subtle.exportKey('jwk', keys.signing.privateKey),
 			encryptionPublicKey: JSON.parse(keys.encryptionPublicKey),
 			encryptionPrivateKey: await crypto.subtle.exportKey('jwk', keys.encryption.privateKey)
 		};
+		const memberships = { [projectId]: { bundle, projectName: 'Cache Test Project', role: 'SUBMITTER' } };
 
 		await page.goto(`/projects/${projectId}/submissions`);
-		await page.evaluate((bundle) => {
-			localStorage.setItem('rt:keys', JSON.stringify(bundle));
-		}, keyBundle);
+		await page.evaluate((data) => {
+			localStorage.setItem('rt:memberships', JSON.stringify(data));
+		}, memberships);
 		await page.reload();
 		await expect(page.getByTestId('submission-card')).toBeVisible({ timeout: 15000 });
 
 		// Simulate logout: clear localStorage (keys) but NOT IndexedDB
-		await page.evaluate(() => localStorage.removeItem('rt:keys'));
+		await page.evaluate(() => localStorage.removeItem('rt:memberships'));
 
 		// IndexedDB should still have the encrypted record
 		const hasIdbRecord = await page.evaluate(async () => {

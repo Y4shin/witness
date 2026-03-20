@@ -10,18 +10,12 @@ import type { GetProjectInvitesResponse } from '$lib/api-types';
  * Requires MODERATOR role.
  */
 export const GET: RequestHandler = async ({ params, locals }) => {
-	if (!locals.user) throw error(401, 'Authentication required');
-
-	const { id: projectId } = params;
-
-	const membership = await db.membership.findUnique({
-		where: { userId_projectId: { userId: locals.user.id, projectId } }
-	});
-	if (!membership) throw error(403, 'Not a member of this project');
-	if (membership.role !== 'MODERATOR') throw error(403, 'Only moderators can view invite links');
+	if (!locals.member) throw error(401, 'Authentication required');
+	if (locals.member.projectId !== params.id) throw error(403, 'Not a member of this project');
+	if (locals.member.role !== 'MODERATOR') throw error(403, 'Only moderators can view invite links');
 
 	const invites = await db.inviteLink.findMany({
-		where: { projectId },
+		where: { projectId: params.id },
 		orderBy: { createdAt: 'desc' }
 	});
 

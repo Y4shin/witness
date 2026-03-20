@@ -14,10 +14,10 @@
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 
-{#if !isAdminRoute && !isAuthRoute && data.userId}
+{#if !isAdminRoute && !isAuthRoute && data.memberId}
 	<nav class="navbar bg-base-200 border-b border-base-300 px-4 min-h-12">
 		<div class="flex-1">
-			<a href="/dashboard" class="text-base font-semibold tracking-tight">Reporting Tool</a>
+			<a href="/dashboard" class="text-base font-semibold tracking-tight">Witness</a>
 		</div>
 		<div class="flex-none gap-2">
 			<a href="/link-device" class="btn btn-ghost btn-xs">{m.nav_link_device()}</a>

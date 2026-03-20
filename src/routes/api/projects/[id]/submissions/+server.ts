@@ -12,19 +12,15 @@ import type { GetSubmissionsResponse } from '$lib/api-types';
  * - SUBMITTER: only their own submissions
  */
 export const GET: RequestHandler = async ({ params, locals }) => {
-	if (!locals.user) throw error(401, 'Authentication required');
+	if (!locals.member) throw error(401, 'Authentication required');
+	if (locals.member.projectId !== params.id) throw error(403, 'Not a member of this project');
 
 	const { id: projectId } = params;
 
-	const membership = await db.membership.findUnique({
-		where: { userId_projectId: { userId: locals.user.id, projectId } }
-	});
-	if (!membership) throw error(403, 'Not a member of this project');
-
 	const where =
-		membership.role === 'MODERATOR'
+		locals.member.role === 'MODERATOR'
 			? { projectId }
-			: { projectId, userId: locals.user.id };
+			: { projectId, memberId: locals.member.id };
 
 	const rows = await db.submission.findMany({
 		where,
@@ -33,14 +29,14 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	});
 
 	logger.info(
-		{ projectId, userId: locals.user.id, role: membership.role, count: rows.length },
+		{ projectId, memberId: locals.member.id, role: locals.member.role, count: rows.length },
 		'Submissions fetched'
 	);
 
 	return json({
 		submissions: rows.map((s) => ({
 			id: s.id,
-			userId: s.userId,
+			memberId: s.memberId,
 			projectId: s.projectId,
 			type: s.type,
 			archiveUrl: s.archiveUrl,

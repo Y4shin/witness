@@ -4,6 +4,8 @@
 	let { form }: { form: ActionData } = $props();
 </script>
 
+<svelte:head><title>Witness – Admin Login</title></svelte:head>
+
 <div class="min-h-screen flex items-center justify-center p-4">
 	<div class="card bg-base-100 shadow-xl w-full max-w-sm">
 		<div class="card-body">

@@ -4,12 +4,10 @@ import { db } from '$lib/server/db';
 import { logger } from '$lib/server/logger';
 import type { PatchFieldResponse } from '$lib/api-types';
 
-async function requireModerator(userId: string, projectId: string) {
-	const membership = await db.membership.findUnique({
-		where: { userId_projectId: { userId, projectId } }
-	});
-	if (!membership) throw error(403, 'Not a member of this project');
-	if (membership.role !== 'MODERATOR') throw error(403, 'Moderator role required');
+function requireModerator(member: App.Locals['member'], projectId: string) {
+	if (!member) throw error(401, 'Authentication required');
+	if (member.projectId !== projectId) throw error(403, 'Not a member of this project');
+	if (member.role !== 'MODERATOR') throw error(403, 'Moderator role required');
 }
 
 async function getField(fieldId: string, projectId: string) {
@@ -23,8 +21,7 @@ async function getField(fieldId: string, projectId: string) {
  * Updates the sortOrder of a field. Requires MODERATOR role.
  */
 export const PATCH: RequestHandler = async ({ params, request, locals }) => {
-	if (!locals.user) throw error(401, 'Authentication required');
-	await requireModerator(locals.user.id, params.id!);
+	requireModerator(locals.member, params.id!);
 
 	let body: unknown;
 	try {
@@ -44,7 +41,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 	});
 
 	logger.info(
-		{ projectId: params.id, userId: locals.user.id, fieldId: params.fieldId, sortOrder: b.sortOrder },
+		{ projectId: params.id, memberId: locals.member!.id, fieldId: params.fieldId, sortOrder: b.sortOrder },
 		'Form field reordered'
 	);
 
@@ -56,14 +53,13 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
  * Deletes a field. Requires MODERATOR role. No minimum-field guard.
  */
 export const DELETE: RequestHandler = async ({ params, locals }) => {
-	if (!locals.user) throw error(401, 'Authentication required');
-	await requireModerator(locals.user.id, params.id!);
+	requireModerator(locals.member, params.id!);
 	await getField(params.fieldId!, params.id!);
 
 	await db.formField.delete({ where: { id: params.fieldId } });
 
 	logger.info(
-		{ projectId: params.id, userId: locals.user.id, fieldId: params.fieldId },
+		{ projectId: params.id, memberId: locals.member!.id, fieldId: params.fieldId },
 		'Form field deleted'
 	);
 
