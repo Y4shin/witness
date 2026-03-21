@@ -6,6 +6,7 @@
 		importEcdhPrivateKey,
 		importUserKeyBundleJwk
 	} from '$lib/crypto';
+	import type { EncryptedKey } from '$lib/crypto/asymmetric';
 	import { loadMembershipForProject } from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
 	import { openCacheDb, initCacheKey, readCacheEntry, writeCacheEntry } from '$lib/stores/cache';
@@ -20,8 +21,14 @@
 		totalPages as calcTotalPages,
 		extractContentDate
 	} from '$lib/stores/submissions-utils';
+	import {
+		binPackFiles,
+		assignFilenames,
+		generateCsv
+	} from '$lib/stores/export-utils';
+	import type { FileToPack } from '$lib/stores/export-utils';
+	import { zipSync } from 'fflate';
 	import type { AnyOrama } from '@orama/orama';
-	import type { EncryptedKey } from '$lib/crypto/asymmetric';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { SubmissionType, FormField } from '$lib/api-types';
 	import type { PageData } from './$types';
@@ -54,6 +61,23 @@
 	let formFields = $state<FormField[]>([]);
 	let refreshing = $state(false);
 	let searchIndex = $state<AnyOrama | null>(null);
+	let projectPrivateKey = $state<CryptoKey | null>(null);
+
+	// ── Export state ───────────────────────────────────────────────────────
+
+	const MAX_ZIP_BYTES = 500 * 1024 * 1024; // 500 MB per ZIP
+
+	type ExportPhase =
+		| { kind: 'idle' }
+		| { kind: 'planning'; fetched: number; total: number }
+		| { kind: 'zipping'; zipIndex: number; zipTotal: number; fileIndex: number; fileTotal: number; filename: string }
+		| { kind: 'csv' }
+		| { kind: 'done'; zipCount: number }
+		| { kind: 'error'; message: string };
+
+	let exportPhase = $state<ExportPhase>({ kind: 'idle' });
+	let completedZips = $state<string[]>([]);
+	let exportAbortController = $state<AbortController | null>(null);
 
 	// ── Filter state ───────────────────────────────────────────────────────────
 
@@ -170,7 +194,7 @@
 
 	// ── Cache key ─────────────────────────────────────────────────────────────
 
-	const CACHE_KEY = `submissions:${data.projectId}`;
+	const CACHE_KEY = $derived(`submissions:${data.projectId}`);
 
 	// ── Mount: load + decrypt ─────────────────────────────────────────────────
 
@@ -203,7 +227,6 @@
 			refreshing = mode === 'cached';
 
 			// Decrypt project private key (moderators only)
-			let projectPrivateKey: CryptoKey | null = null;
 			if (data.role === 'MODERATOR' && data.encryptedProjectPrivateKey) {
 				const encProjKey = JSON.parse(data.encryptedProjectPrivateKey) as {
 					payload: string;
@@ -346,6 +369,173 @@
 	}
 
 	const ALL_TYPES: SubmissionType[] = ['WEBPAGE', 'YOUTUBE_VIDEO', 'INSTAGRAM_POST', 'INSTAGRAM_STORY'];
+
+	// ── Export helpers ─────────────────────────────────────────────────────
+
+	function triggerDownload(bytes: Uint8Array, filename: string, mimeType: string) {
+		const blob = new Blob([bytes], { type: mimeType });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = filename;
+		a.click();
+		URL.revokeObjectURL(url);
+	}
+
+	async function runExport() {
+		const ac = new AbortController();
+		exportAbortController = ac;
+		completedZips = [];
+
+		try {
+			// ── Phase 1: Plan ────────────────────────────────────────────────
+			// Collect all submissions in the current filtered order that have files
+			const orderedSubs = filteredSortedIds
+				.map((id, idx) => ({ id, idx, sub: submissions.find((s) => s.id === id) }))
+				.filter((x): x is { id: string; idx: number; sub: typeof submissions[number] } => !!x.sub && x.sub.fileCount > 0);
+
+			exportPhase = { kind: 'planning', fetched: 0, total: orderedSubs.length };
+
+			const allFiles: FileToPack[] = [];
+			const filesBySubmission = new Map<string, string[]>();
+			const fileKeys = new Map<string, string>(); // fileId → encryptedKey (JSON string)
+
+			// Fetch file records in chunks of 10 to avoid too many concurrent requests
+			const CHUNK = 10;
+			for (let i = 0; i < orderedSubs.length; i += CHUNK) {
+				if (ac.signal.aborted) return;
+
+				const chunk = orderedSubs.slice(i, i + CHUNK);
+				const results = await Promise.all(
+					chunk.map(async ({ id, idx, sub }) => {
+						const { files } = await api.files.list(id);
+						return { id, idx, sub, files };
+					})
+				);
+
+				for (const { id, idx, sub, files } of results) {
+					filesBySubmission.set(id, files.map((f) => f.id));
+					for (const f of files) {
+						fileKeys.set(f.id, f.encryptedKey);
+						allFiles.push({
+							submissionId: id,
+							fileId: f.id,
+							fieldName: f.fieldName,
+							mimeType: f.mimeType,
+							sizeBytes: f.sizeBytes,
+							submissionIndex: idx,
+							submissionType: sub.type
+						});
+					}
+				}
+
+				exportPhase = {
+					kind: 'planning',
+					fetched: Math.min(i + CHUNK, orderedSubs.length),
+					total: orderedSubs.length
+				};
+			}
+
+			// ── Phase 2: Bin-pack ────────────────────────────────────────────
+			const batches = binPackFiles(allFiles, MAX_ZIP_BYTES);
+			const dateStr = new Date().toISOString().slice(0, 10);
+			const assignments = assignFilenames(batches, filteredSortedIds.length, dateStr);
+
+			// ── Phase 3: Zip loop ────────────────────────────────────────────
+			const totalFiles = allFiles.length;
+			let filesProcessed = 0;
+
+			for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+				if (ac.signal.aborted) return;
+
+				const batch = batches[batchIdx];
+				const zipFiles: Record<string, Uint8Array> = {};
+
+				for (const file of batch) {
+					if (ac.signal.aborted) return;
+
+					const packed = assignments.get(file.fileId)!;
+					exportPhase = {
+						kind: 'zipping',
+						zipIndex: batchIdx + 1,
+						zipTotal: batches.length,
+						fileIndex: filesProcessed + 1,
+						fileTotal: totalFiles,
+						filename: packed.filename
+					};
+
+					// Fetch encrypted bytes and decrypt using project private key
+					const encBytes = await api.files.downloadEncrypted(file.submissionId, file.fileId);
+					const encKey = JSON.parse(fileKeys.get(file.fileId)!) as EncryptedKey;
+					const symKey = await decryptSymmetricKey(encKey, projectPrivateKey!);
+					const iv = encBytes.slice(0, 12);
+					const ciphertext = encBytes.slice(12);
+					const decrypted = new Uint8Array(
+						await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, symKey, ciphertext)
+					);
+
+					zipFiles[packed.filename] = decrypted;
+					filesProcessed++;
+				}
+
+				// Build and immediately download this ZIP
+				const zipName = `export-${dateStr}-part${batchIdx + 1}`;
+				const zipped = zipSync(zipFiles);
+				triggerDownload(zipped, `${zipName}.zip`, 'application/zip');
+				completedZips = [...completedZips, zipName];
+			}
+
+			// ── Phase 4: CSV ─────────────────────────────────────────────────
+			exportPhase = { kind: 'csv' };
+
+			const exportSubs = filteredSortedIds
+				.map((id) => submissions.find((s) => s.id === id))
+				.filter((s): s is typeof submissions[number] => s !== undefined);
+
+			const csvFields = formFields
+				.filter((f) => f.type !== 'FILE')
+				.map((f) => ({ id: f.id, label: f.label }));
+
+			const csvStr = generateCsv(
+				exportSubs.map((s) => ({
+					id: s.id,
+					type: s.type,
+					createdAt: s.createdAt,
+					contentDate: s.contentDate,
+					archiveUrl: s.archiveUrl,
+					fileCount: s.fileCount,
+					fields: s.fields
+				})),
+				csvFields,
+				assignments,
+				filesBySubmission
+			);
+
+			triggerDownload(
+				new TextEncoder().encode(csvStr),
+				`export-${dateStr}-submissions.csv`,
+				'text/csv;charset=utf-8'
+			);
+
+			exportPhase = { kind: 'done', zipCount: batches.length };
+		} catch (err) {
+			if (!ac.signal.aborted) {
+				exportPhase = {
+					kind: 'error',
+					message: err instanceof Error ? err.message : 'Export failed'
+				};
+			}
+		} finally {
+			exportAbortController = null;
+		}
+	}
+
+	function cancelExport() {
+		exportAbortController?.abort();
+		exportAbortController = null;
+		exportPhase = { kind: 'idle' };
+		completedZips = [];
+	}
 </script>
 
 <svelte:head><title>Witness – Submissions</title></svelte:head>
@@ -411,7 +601,88 @@
 						{sortDir === 'ASC' ? '↑' : '↓'}
 					</button>
 				</div>
+
+				{#if data.role === 'MODERATOR'}
+					<button
+						class="btn btn-sm btn-ghost border border-base-300"
+						onclick={runExport}
+						disabled={exportPhase.kind !== 'idle' || filteredSortedIds.length === 0}
+						aria-label="Export submissions"
+					>
+						↓ Export
+					</button>
+				{/if}
 			</div>
+
+			<!-- ── Export progress panel ──────────────────────────────────────── -->
+			{#if exportPhase.kind !== 'idle'}
+				<div class="card bg-base-100 shadow mb-4 max-w-2xl">
+					<div class="card-body py-4 gap-3">
+
+						{#if exportPhase.kind === 'planning'}
+							<p class="text-sm font-medium">
+								Planning export — fetching file metadata
+								({exportPhase.fetched} / {exportPhase.total} submissions with files)…
+							</p>
+							<progress
+								class="progress progress-primary w-full"
+								value={exportPhase.fetched}
+								max={exportPhase.total || 1}
+							></progress>
+
+						{:else if exportPhase.kind === 'zipping'}
+							<p class="text-sm font-medium">
+								Building ZIP {exportPhase.zipIndex} of {exportPhase.zipTotal}
+								&nbsp;·&nbsp; {exportPhase.fileIndex} / {exportPhase.fileTotal} files
+							</p>
+							<progress
+								class="progress progress-primary w-full"
+								value={exportPhase.fileIndex}
+								max={exportPhase.fileTotal}
+							></progress>
+							<p class="text-xs text-base-content/50 truncate">
+								Decrypting: {exportPhase.filename}
+							</p>
+
+						{:else if exportPhase.kind === 'csv'}
+							<p class="text-sm font-medium">Generating CSV…</p>
+
+						{:else if exportPhase.kind === 'done'}
+							<p class="text-sm font-medium text-success">
+								Export complete — {exportPhase.zipCount > 0
+									? `${exportPhase.zipCount} ZIP${exportPhase.zipCount !== 1 ? 's' : ''} + `
+									: ''}CSV downloaded.
+							</p>
+
+						{:else if exportPhase.kind === 'error'}
+							<p class="text-sm text-error">Export failed: {exportPhase.message}</p>
+						{/if}
+
+						{#if completedZips.length > 0}
+							<div class="flex flex-wrap gap-2">
+								{#each completedZips as zip (zip)}
+									<span class="badge badge-success badge-sm">{zip}.zip ✓</span>
+								{/each}
+							</div>
+						{/if}
+
+						<div class="flex gap-2">
+							{#if exportPhase.kind === 'done' || exportPhase.kind === 'error'}
+								<button
+									class="btn btn-sm btn-ghost"
+									onclick={() => { exportPhase = { kind: 'idle' }; completedZips = []; }}
+								>
+									Dismiss
+								</button>
+							{:else}
+								<button class="btn btn-sm btn-ghost text-error" onclick={cancelExport}>
+									Cancel
+								</button>
+							{/if}
+						</div>
+					</div>
+				</div>
+			{/if}
 
 			<!-- ── Filter panel ───────────────────────────────────────────────── -->
 			{#if filtersOpen}

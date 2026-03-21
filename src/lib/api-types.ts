@@ -228,6 +228,17 @@ export interface PromoteResponse {
 	ok: boolean;
 }
 
+// ── GET /api/submissions/[id]/files ───────────────────────────────────────
+
+/** File record returned to moderators — includes the project-wrapped key for decryption. */
+export interface FileRecordWithKey extends FileRecord {
+	encryptedKey: string; // JSON-serialised SubmissionKeyBundle (project public key)
+}
+
+export interface GetFilesResponse {
+	files: FileRecordWithKey[];
+}
+
 // ── GET /api/projects/[id]/submissions ────────────────────────────────────
 
 export interface SubmissionRecord {

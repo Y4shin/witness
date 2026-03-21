@@ -4,7 +4,36 @@ import { db } from '$lib/server/db';
 import { logger } from '$lib/server/logger';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { UploadFileRequest, UploadFileResponse } from '$lib/api-types';
+import type { UploadFileRequest, UploadFileResponse, GetFilesResponse } from '$lib/api-types';
+
+/**
+ * GET /api/submissions/[id]/files
+ *
+ * Returns file records with encrypted keys for a submission.
+ * Moderator-only: needed to decrypt files for export.
+ */
+export const GET: RequestHandler = async ({ params, locals }) => {
+	if (!locals.member) throw error(401, 'Authentication required');
+	if (locals.member.role !== 'MODERATOR') throw error(403, 'Only moderators can list file records');
+
+	const submission = await db.submission.findUnique({
+		where: { id: params.id },
+		include: { files: { orderBy: { createdAt: 'asc' } } }
+	});
+	if (!submission) throw error(404, 'Submission not found');
+	if (submission.projectId !== locals.member.projectId) throw error(403, 'Not a member of this project');
+
+	return json({
+		files: submission.files.map((f) => ({
+			id: f.id,
+			fieldName: f.fieldName,
+			mimeType: f.mimeType,
+			sizeBytes: f.sizeBytes,
+			createdAt: f.createdAt.toISOString(),
+			encryptedKey: f.encryptedKey
+		}))
+	} satisfies GetFilesResponse);
+};
 
 /**
  * POST /api/submissions/[id]/files

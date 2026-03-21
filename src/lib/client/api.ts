@@ -21,6 +21,7 @@ import type {
 	GetSubmissionsResponse,
 	UploadFileRequest,
 	UploadFileResponse,
+	GetFilesResponse,
 	GetMembersResponse,
 	PromoteRequest,
 	PromoteResponse,
@@ -108,6 +109,22 @@ export const api = {
 
 		uploadFile: (submissionId: string, body: UploadFileRequest): Promise<UploadFileResponse> =>
 			post(`/api/submissions/${submissionId}/files`, body)
+	},
+
+	files: {
+		/** Moderator-only: returns file records with encrypted keys for a submission. */
+		list: (submissionId: string): Promise<GetFilesResponse> =>
+			call(`/api/submissions/${submissionId}/files`),
+
+		/** Moderator-only: returns the raw encrypted bytes of a file. */
+		downloadEncrypted: async (submissionId: string, fileId: string): Promise<Uint8Array> => {
+			const res = await fetch(`/api/submissions/${submissionId}/files/${fileId}`);
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({})) as { message?: string };
+				throw new ApiError(res.status, data.message ?? `HTTP ${res.status}`);
+			}
+			return new Uint8Array(await res.arrayBuffer());
+		}
 	},
 
 	members: {
