@@ -14,6 +14,12 @@
 		buildSubmissionIndex,
 		searchSubmissions
 	} from '$lib/stores/submissions-search';
+	import {
+		sortSubmissionIds,
+		paginateIds,
+		totalPages as calcTotalPages,
+		extractContentDate
+	} from '$lib/stores/submissions-utils';
 	import type { AnyOrama } from '@orama/orama';
 	import type { EncryptedKey } from '$lib/crypto/asymmetric';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -145,29 +151,7 @@
 
 			// Client-side sort
 			const subMap = new Map(subs.map((s) => [s.id, s]));
-			ids = ids.slice().sort((a, b) => {
-				const sa = subMap.get(a);
-				const sb = subMap.get(b);
-				if (!sa || !sb) return 0;
-				let cmp = 0;
-				if (sf === 'submittedAt') {
-					cmp = new Date(sa.createdAt).getTime() - new Date(sb.createdAt).getTime();
-				} else if (sf === 'contentDate') {
-					const da = sa.contentDate ? new Date(sa.contentDate).getTime() : 0;
-					const db = sb.contentDate ? new Date(sb.contentDate).getTime() : 0;
-					cmp = da - db;
-				} else if (sf === 'type') {
-					cmp = sa.type.localeCompare(sb.type);
-				} else if (sf === 'fileCount') {
-					cmp = sa.fileCount - sb.fileCount;
-				} else {
-					// Custom TEXT field: sort by value at that key
-					const va = sa.fields[sf] ?? '';
-					const vb = sb.fields[sf] ?? '';
-					cmp = va.localeCompare(vb);
-				}
-				return sd === 'ASC' ? cmp : -cmp;
-			});
+			ids = sortSubmissionIds(ids, subMap, sf, sd);
 
 			filteredSortedIds = ids;
 			currentPage = 1;
@@ -176,11 +160,10 @@
 
 	// ── Pagination derived ─────────────────────────────────────────────────────
 
-	const totalPages = $derived(Math.max(1, Math.ceil(filteredSortedIds.length / PAGE_SIZE)));
+	const totalPages = $derived(calcTotalPages(filteredSortedIds.length, PAGE_SIZE));
 	const visibleSubs = $derived.by(() => {
-		const start = (currentPage - 1) * PAGE_SIZE;
-		return filteredSortedIds
-			.slice(start, start + PAGE_SIZE)
+		const pageIds = paginateIds(filteredSortedIds, currentPage, PAGE_SIZE);
+		return pageIds
 			.map((id) => submissions.find((s) => s.id === id))
 			.filter((s): s is DecryptedSubmission => s !== undefined);
 	});
@@ -258,11 +241,7 @@
 						const fields = JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, string>;
 
 						// Extract contentDate from the first DATE-type form field
-						let contentDate: string | null = null;
-						for (const fieldId of dateFieldIds) {
-							const val = fields[`custom_${fieldId}`];
-							if (val) { contentDate = val; break; }
-						}
+						const contentDate = extractContentDate(fields, dateFieldIds);
 
 						return {
 							id: s.id,
