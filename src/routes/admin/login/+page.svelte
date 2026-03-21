@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ActionData } from './$types';
+	import * as m from '$lib/paraglide/messages';
 
 	let { form }: { form: ActionData } = $props();
 </script>
@@ -9,7 +10,7 @@
 <div class="min-h-screen flex items-center justify-center p-4">
 	<div class="card bg-base-100 shadow-xl w-full max-w-sm">
 		<div class="card-body">
-			<h1 class="card-title text-xl mb-4">Admin login</h1>
+			<h1 class="card-title text-xl mb-4">{m.admin_login_title()}</h1>
 
 			{#if form?.error}
 				<div role="alert" class="alert alert-error mb-4">
@@ -20,7 +21,7 @@
 			<form method="POST">
 				<div class="form-control mb-4">
 					<label class="label" for="password">
-						<span class="label-text">Password</span>
+						<span class="label-text">{m.admin_password_label()}</span>
 					</label>
 					<input
 						id="password"
@@ -31,7 +32,7 @@
 						required
 					/>
 				</div>
-				<button type="submit" class="btn btn-primary w-full">Sign in</button>
+				<button type="submit" class="btn btn-primary w-full">{m.admin_sign_in_btn()}</button>
 			</form>
 		</div>
 	</div>

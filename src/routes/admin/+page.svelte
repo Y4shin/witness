@@ -1,6 +1,7 @@
-﻿<script lang="ts">
+<script lang="ts">
 	import type { PageData, ActionData } from './$types';
 	import QrCode from '$lib/components/QrCode.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -14,16 +15,16 @@
 	<div class="max-w-3xl mx-auto space-y-6">
 		<!-- Header -->
 		<div class="flex items-center justify-between">
-			<h1 class="text-2xl font-bold">Admin console</h1>
+			<h1 class="text-2xl font-bold">{m.admin_console_title()}</h1>
 			<form method="POST" action="?/logout">
-				<button type="submit" class="btn btn-ghost btn-sm">Sign out</button>
+				<button type="submit" class="btn btn-ghost btn-sm">{m.admin_sign_out_btn()}</button>
 			</form>
 		</div>
 
 		<!-- Create project -->
 		<div class="card bg-base-100 shadow">
 			<div class="card-body">
-				<h2 class="card-title text-lg">Create project</h2>
+				<h2 class="card-title text-lg">{m.admin_create_project_title()}</h2>
 
 				{#if form?.createError}
 					<div role="alert" class="alert alert-error">
@@ -35,19 +36,19 @@
 					<input
 						name="name"
 						type="text"
-						placeholder="Project name"
+						placeholder={m.admin_project_name_placeholder()}
 						class="input input-bordered flex-1"
 						required
 					/>
-					<button type="submit" class="btn btn-primary">Create</button>
+					<button type="submit" class="btn btn-primary">{m.admin_create_btn()}</button>
 				</form>
 
 				{#if form?.created}
 					<div class="mt-4 p-4 border border-success rounded-box space-y-3">
 						<p class="font-semibold text-success">
-							Project <span class="font-mono">{form.created.name}</span> created.
+							{m.admin_project_created()} <span class="font-mono">{form.created.name}</span>
 						</p>
-						<p class="text-sm">Share this one-time MODERATOR invite link:</p>
+						<p class="text-sm">{m.admin_moderator_invite_text()}</p>
 						<div class="flex items-center gap-2">
 							<code
 								data-testid="invite-link"
@@ -59,7 +60,7 @@
 								class="btn btn-ghost btn-sm"
 								onclick={() => navigator.clipboard.writeText(form.created.inviteUrl)}
 							>
-								Copy
+								{m.admin_copy_btn()}
 							</button>
 						</div>
 						<div data-testid="qr-code" class="w-40">
@@ -73,7 +74,7 @@
 		<!-- Project list -->
 		<div class="card bg-base-100 shadow">
 			<div class="card-body">
-				<h2 class="card-title text-lg">Projects</h2>
+				<h2 class="card-title text-lg">{m.admin_projects_title()}</h2>
 
 				{#if form?.deleteError}
 					<div role="alert" class="alert alert-error">
@@ -82,7 +83,7 @@
 				{/if}
 
 				{#if data.projects.length === 0}
-					<p class="text-base-content/60">No projects yet.</p>
+					<p class="text-base-content/60">{m.admin_no_projects()}</p>
 				{:else}
 					<ul class="space-y-2">
 						{#each data.projects as project (project.id)}
@@ -101,14 +102,14 @@
 												data-testid="confirm-delete-project"
 												class="btn btn-error btn-sm"
 											>
-												Confirm delete
+												{m.admin_confirm_delete_btn()}
 											</button>
 										</form>
 										<button
 											class="btn btn-ghost btn-sm"
 											onclick={() => (confirmDeleteId = null)}
 										>
-											Cancel
+											{m.admin_cancel_btn()}
 										</button>
 									</div>
 								{:else}
@@ -117,7 +118,7 @@
 										class="btn btn-ghost btn-sm text-error"
 										onclick={() => (confirmDeleteId = project.id)}
 									>
-										Delete
+										{m.admin_delete_btn()}
 									</button>
 								{/if}
 							</li>

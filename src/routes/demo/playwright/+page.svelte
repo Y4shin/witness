@@ -1,1 +1,5 @@
-<h1>Playwright e2e test demo</h1>
+<script lang="ts">
+	import * as m from '$lib/paraglide/messages';
+</script>
+
+<h1>{m.demo_playwright_heading()}</h1>

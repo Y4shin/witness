@@ -10,13 +10,4 @@
 	<button onclick={() => setLocale('de')}>de</button>
 </div>
 
-<p>
-	If you use VSCode, install the
-
-	<a
-		href="https://marketplace.visualstudio.com/items?itemName=inlang.vs-code-extension"
-		target="_blank">Sherlock i18n extension</a
-	>
-
-	for a better i18n experience.
-</p>
+<p>{m.demo_vscode_tip()}</p>
