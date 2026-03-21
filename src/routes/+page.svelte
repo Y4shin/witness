@@ -1,3 +1,28 @@
+<script lang="ts">
+	let inviteInput = $state('');
+	let inviteError = $state('');
+
+	function extractToken(raw: string): string | null {
+		const trimmed = raw.trim();
+		if (!trimmed) return null;
+		// Full URL or path — find /invite/<token>
+		const match = trimmed.match(/\/invite\/([^/?#\s]+)/);
+		if (match) return match[1];
+		// Bare token (no slashes)
+		if (!trimmed.includes('/')) return trimmed;
+		return null;
+	}
+
+	function goToInvite() {
+		const token = extractToken(inviteInput);
+		if (!token) {
+			inviteError = 'Paste a valid invite link or token.';
+			return;
+		}
+		window.location.href = `/invite/${token}`;
+	}
+</script>
+
 <svelte:head><title>Witness</title></svelte:head>
 
 <div class="min-h-screen flex flex-col items-center justify-center p-8 gap-10">
@@ -24,7 +49,24 @@
 		</div>
 	</div>
 
-	<p class="text-base-content/50 text-sm">
-		To get started, open an invite link shared with you.
-	</p>
+	<div class="card bg-base-100 shadow w-full max-w-md">
+		<div class="card-body gap-3">
+			<p class="font-semibold">Join a project</p>
+			<p class="text-sm text-base-content/60">Paste an invite link to get started.</p>
+			<div class="flex gap-2">
+				<input
+					type="text"
+					class="input input-bordered flex-1 text-sm"
+					placeholder="https://…/invite/… or paste a token"
+					bind:value={inviteInput}
+					oninput={() => (inviteError = '')}
+					onkeydown={(e) => { if (e.key === 'Enter') goToInvite(); }}
+				/>
+				<button class="btn btn-primary btn-sm self-center" onclick={goToInvite}>Go</button>
+			</div>
+			{#if inviteError}
+				<p class="text-error text-sm">{inviteError}</p>
+			{/if}
+		</div>
+	</div>
 </div>

@@ -6,10 +6,30 @@
 
 	let privacyOpen = $state(false);
 	let projects = $state<{ projectId: string; projectName: string; role: 'SUBMITTER' | 'MODERATOR' }[]>([]);
+	let inviteInput = $state('');
+	let inviteError = $state('');
 
 	onMount(() => {
 		projects = listProjectMemberships();
 	});
+
+	function extractToken(raw: string): string | null {
+		const trimmed = raw.trim();
+		if (!trimmed) return null;
+		const match = trimmed.match(/\/invite\/([^/?#\s]+)/);
+		if (match) return match[1];
+		if (!trimmed.includes('/')) return trimmed;
+		return null;
+	}
+
+	function goToInvite() {
+		const token = extractToken(inviteInput);
+		if (!token) {
+			inviteError = 'Paste a valid invite link or token.';
+			return;
+		}
+		window.location.href = `/invite/${token}`;
+	}
 </script>
 
 <svelte:head><title>Witness – Dashboard</title></svelte:head>
@@ -53,4 +73,24 @@
 			{/each}
 		</div>
 	{/if}
+
+	<div class="divider mt-6"></div>
+
+	<div class="max-w-md">
+		<p class="text-sm font-semibold mb-2">Join another project</p>
+		<div class="flex gap-2">
+			<input
+				type="text"
+				class="input input-bordered flex-1 text-sm"
+				placeholder="Paste an invite link or token"
+				bind:value={inviteInput}
+				oninput={() => (inviteError = '')}
+				onkeydown={(e) => { if (e.key === 'Enter') goToInvite(); }}
+			/>
+			<button class="btn btn-primary btn-sm self-center" onclick={goToInvite}>Go</button>
+		</div>
+		{#if inviteError}
+			<p class="text-error text-sm mt-1">{inviteError}</p>
+		{/if}
+	</div>
 </div>
