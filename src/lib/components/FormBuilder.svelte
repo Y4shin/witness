@@ -170,6 +170,7 @@
 					<option value="TEXT">Text</option>
 					<option value="SELECT">Select</option>
 					<option value="FILE">File</option>
+					<option value="DATE">Date</option>
 				</select>
 			</label>
 

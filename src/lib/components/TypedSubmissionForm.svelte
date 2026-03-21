@@ -23,10 +23,20 @@
 
 	const typeDef = $derived(getTypeDef(selectedType));
 
-	// Reset field values when type changes
+	// Reset type-specific field values when type changes
 	$effect(() => {
 		selectedType;
 		fieldValues = {};
+	});
+
+	// Initialise DATE fields to today's date when form fields are available
+	$effect(() => {
+		const today = new Date().toISOString().slice(0, 10);
+		for (const f of formFields) {
+			if (f.type === 'DATE' && !fieldValues[`custom_${f.id}`]) {
+				fieldValues[`custom_${f.id}`] = today;
+			}
+		}
 	});
 
 	function handleFileChange(e: Event) {
@@ -117,6 +127,14 @@
 						<option value={opt}>{opt}</option>
 					{/each}
 				</select>
+			{:else if field.type === 'DATE'}
+				<input
+					type="date"
+					class="input input-bordered"
+					bind:value={fieldValues[`custom_${field.id}`]}
+					required={field.required}
+					aria-label={field.label}
+				/>
 			{:else}
 				<input
 					type="text"

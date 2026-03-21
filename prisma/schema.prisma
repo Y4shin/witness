@@ -18,6 +18,7 @@ enum FieldType {
   TEXT
   SELECT
   FILE
+  DATE
 }
 
 enum SubmissionType {

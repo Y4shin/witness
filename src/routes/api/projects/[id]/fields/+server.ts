@@ -43,9 +43,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		throw error(400, 'label is required');
 	}
 
-	const VALID_TYPES = ['TEXT', 'SELECT', 'FILE'] as const;
+	const VALID_TYPES = ['TEXT', 'SELECT', 'FILE', 'DATE'] as const;
 	if (!VALID_TYPES.includes(b.type as (typeof VALID_TYPES)[number])) {
-		throw error(400, 'type must be TEXT, SELECT, or FILE');
+		throw error(400, 'type must be TEXT, SELECT, FILE, or DATE');
 	}
 
 	const type = b.type as CreateFieldRequest['type'];

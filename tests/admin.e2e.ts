@@ -88,6 +88,9 @@ test.describe('admin console', () => {
 		await createProject(page, uniqueName);
 		const row = page.locator('li', { hasText: uniqueName });
 		await expect(row).toBeVisible();
+		// Wait for Svelte hydration to complete (form POST causes full page reload;
+		// the row may be visible in the SSR HTML before onclick handlers are attached)
+		await page.waitForLoadState('networkidle');
 
 		// Click delete, wait for confirm to appear, then confirm — scoped to the specific row
 		await row.locator('[data-testid=delete-project]').click();

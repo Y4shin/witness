@@ -138,7 +138,7 @@ export interface FileRecord {
 
 // ── FormField ─────────────────────────────────────────────────────────────
 
-export type FieldType = 'TEXT' | 'SELECT' | 'FILE';
+export type FieldType = 'TEXT' | 'SELECT' | 'FILE' | 'DATE';
 
 /** Raw shape returned by the server. `options` is a JSON string for SELECT, null otherwise. */
 export interface FormField {
