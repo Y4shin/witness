@@ -124,10 +124,10 @@
 
 	// Sort options: fixed fields + one per TEXT form field
 	const sortOptions = $derived([
-		{ value: 'submittedAt', label: 'Submitted date' },
-		...(hasContentDates ? [{ value: 'contentDate', label: 'Content date' }] : []),
-		{ value: 'type',      label: 'Type' },
-		{ value: 'fileCount', label: 'Files' },
+		{ value: 'submittedAt', label: m.submissions_sort_submitted() },
+		...(hasContentDates ? [{ value: 'contentDate', label: m.submissions_sort_content_date() }] : []),
+		{ value: 'type',      label: m.submissions_sort_type() },
+		{ value: 'fileCount', label: m.submissions_sort_files() },
 		...textFormFields.map((f) => ({ value: `custom_${f.id}`, label: f.label }))
 	]);
 
@@ -571,7 +571,7 @@
 					class="input input-bordered flex-1 min-w-48"
 					placeholder={m.submissions_search_placeholder()}
 					bind:value={textQuery}
-					aria-label="Search submissions"
+					aria-label={m.submissions_aria_search()}
 				/>
 
 				<button
@@ -579,7 +579,7 @@
 					onclick={() => (filtersOpen = !filtersOpen)}
 					aria-expanded={filtersOpen}
 				>
-					Filters
+					{m.submissions_filters_btn()}
 					{#if activeFilterCount > 0}
 						<span class="badge badge-sm badge-neutral">{activeFilterCount}</span>
 					{/if}
@@ -590,7 +590,7 @@
 					<select
 						class="select select-bordered select-sm"
 						bind:value={sortField}
-						aria-label="Sort by"
+						aria-label={m.submissions_aria_sort_by()}
 					>
 						{#each sortOptions as opt (opt.value)}
 							<option value={opt.value}>{opt.label}</option>
@@ -599,8 +599,8 @@
 					<button
 						class="btn btn-sm btn-ghost border border-base-300 font-mono"
 						onclick={() => (sortDir = sortDir === 'ASC' ? 'DESC' : 'ASC')}
-						aria-label="Toggle sort direction"
-						title={sortDir === 'ASC' ? 'Ascending' : 'Descending'}
+						aria-label={m.submissions_aria_sort_dir()}
+						title={sortDir === 'ASC' ? m.submissions_sort_asc() : m.submissions_sort_desc()}
 					>
 						{sortDir === 'ASC' ? '↑' : '↓'}
 					</button>
@@ -610,9 +610,9 @@
 					class="btn btn-sm btn-ghost border border-base-300"
 					onclick={runExport}
 					disabled={exportPhase.kind !== 'idle' || filteredSortedIds.length === 0}
-					aria-label="Export submissions"
+					aria-label={m.submissions_aria_export()}
 				>
-					↓ Export
+					{m.submissions_export_btn()}
 				</button>
 			</div>
 
@@ -623,8 +623,7 @@
 
 						{#if exportPhase.kind === 'planning'}
 							<p class="text-sm font-medium">
-								Planning export — fetching file metadata
-								({exportPhase.fetched} / {exportPhase.total} submissions with files)…
+								{m.submissions_export_planning()} ({exportPhase.fetched} / {exportPhase.total} {m.submissions_export_submissions_with_files()})…
 							</p>
 							<progress
 								class="progress progress-primary w-full"
@@ -634,8 +633,8 @@
 
 						{:else if exportPhase.kind === 'zipping'}
 							<p class="text-sm font-medium">
-								Building ZIP {exportPhase.zipIndex} of {exportPhase.zipTotal}
-								&nbsp;·&nbsp; {exportPhase.fileIndex} / {exportPhase.fileTotal} files
+								{m.submissions_export_building_zip()} {exportPhase.zipIndex} {m.submissions_export_of()} {exportPhase.zipTotal}
+								&nbsp;·&nbsp; {exportPhase.fileIndex} / {exportPhase.fileTotal} {m.submissions_export_files_label()}
 							</p>
 							<progress
 								class="progress progress-primary w-full"
@@ -643,21 +642,19 @@
 								max={exportPhase.fileTotal}
 							></progress>
 							<p class="text-xs text-base-content/50 truncate">
-								Decrypting: {exportPhase.filename}
+								{m.submissions_export_decrypting()} {exportPhase.filename}
 							</p>
 
 						{:else if exportPhase.kind === 'csv'}
-							<p class="text-sm font-medium">Generating CSV…</p>
+							<p class="text-sm font-medium">{m.submissions_export_csv()}</p>
 
 						{:else if exportPhase.kind === 'done'}
 							<p class="text-sm font-medium text-success">
-								Export complete — {exportPhase.zipCount > 0
-									? `${exportPhase.zipCount} ZIP${exportPhase.zipCount !== 1 ? 's' : ''} + `
-									: ''}CSV downloaded.
+								{m.submissions_export_done()} {exportPhase.zipCount > 0 ? exportPhase.zipCount + (exportPhase.zipCount !== 1 ? ' ZIPs + ' : ' ZIP + ') : ''}{m.submissions_export_done_csv()}
 							</p>
 
 						{:else if exportPhase.kind === 'error'}
-							<p class="text-sm text-error">Export failed: {exportPhase.message}</p>
+							<p class="text-sm text-error">{m.submissions_export_error()} {exportPhase.message}</p>
 						{/if}
 
 						{#if completedZips.length > 0}
@@ -674,11 +671,11 @@
 									class="btn btn-sm btn-ghost"
 									onclick={() => { exportPhase = { kind: 'idle' }; completedZips = []; }}
 								>
-									Dismiss
+									{m.submissions_export_dismiss()}
 								</button>
 							{:else}
 								<button class="btn btn-sm btn-ghost text-error" onclick={cancelExport}>
-									Cancel
+									{m.submissions_export_cancel()}
 								</button>
 							{/if}
 						</div>
@@ -693,7 +690,7 @@
 
 						<!-- Type toggles -->
 						<div>
-							<p class="text-sm font-medium mb-2">Type</p>
+							<p class="text-sm font-medium mb-2">{m.submissions_filter_type()}</p>
 							<div class="flex flex-wrap gap-2">
 								{#each ALL_TYPES as t (t)}
 									<button
@@ -709,7 +706,7 @@
 						<!-- Text column selector (only shown when there are TEXT form fields) -->
 						{#if textFormFields.length > 0}
 							<div>
-								<p class="text-sm font-medium mb-1">Search in</p>
+								<p class="text-sm font-medium mb-1">{m.submissions_filter_search_in()}</p>
 								<div class="flex flex-wrap gap-3">
 									{#each textFormFields as f (f.id)}
 										<label class="flex items-center gap-1 cursor-pointer text-sm">
@@ -724,27 +721,27 @@
 									{/each}
 								</div>
 								<p class="text-xs text-base-content/50 mt-1">
-									{textColumns.size === 0 ? 'Searching all columns' : `Searching ${textColumns.size} column${textColumns.size === 1 ? '' : 's'}`}
+									{textColumns.size === 0 ? m.submissions_filter_all_columns() : (textColumns.size === 1 ? m.submissions_filter_columns_singular() : m.submissions_filter_search_in() + ' ' + textColumns.size + ' columns')}
 								</p>
 							</div>
 						{/if}
 
 						<!-- Submitted date range -->
 						<div>
-							<p class="text-sm font-medium mb-2">Submitted date</p>
+							<p class="text-sm font-medium mb-2">{m.submissions_filter_submitted_date()}</p>
 							<div class="flex flex-wrap items-center gap-2">
 								<input
 									type="date"
 									class="input input-bordered input-sm"
 									bind:value={submittedFrom}
-									aria-label="Submitted from"
+									aria-label={m.submissions_aria_submitted_from()}
 								/>
 								<span class="text-base-content/50">→</span>
 								<input
 									type="date"
 									class="input input-bordered input-sm"
 									bind:value={submittedTo}
-									aria-label="Submitted to"
+									aria-label={m.submissions_aria_submitted_to()}
 								/>
 							</div>
 						</div>
@@ -752,20 +749,20 @@
 						<!-- Content date range (only shown when there are DATE form fields or any submission has a content date) -->
 						{#if dateFormFields.length > 0 || hasContentDates}
 							<div>
-								<p class="text-sm font-medium mb-2">Content date</p>
+								<p class="text-sm font-medium mb-2">{m.submissions_filter_content_date()}</p>
 								<div class="flex flex-wrap items-center gap-2">
 									<input
 										type="date"
 										class="input input-bordered input-sm"
 										bind:value={contentFrom}
-										aria-label="Content date from"
+										aria-label={m.submissions_aria_content_from()}
 									/>
 									<span class="text-base-content/50">→</span>
 									<input
 										type="date"
 										class="input input-bordered input-sm"
 										bind:value={contentTo}
-										aria-label="Content date to"
+										aria-label={m.submissions_aria_content_to()}
 									/>
 								</div>
 							</div>
@@ -801,7 +798,7 @@
 									class="checkbox checkbox-sm"
 									bind:checked={hasFilesOnly}
 								/>
-								Has files
+								{m.submissions_filter_has_files()}
 							</label>
 							<label class="flex items-center gap-2 cursor-pointer text-sm">
 								<input
@@ -809,13 +806,13 @@
 									class="checkbox checkbox-sm"
 									bind:checked={hasArchiveOnly}
 								/>
-								Has archive link
+								{m.submissions_filter_has_archive()}
 							</label>
 						</div>
 
 						{#if activeFilterCount > 0}
 							<button class="btn btn-sm btn-ghost self-start" onclick={clearFilters}>
-								Clear all filters
+								{m.submissions_filter_clear()}
 							</button>
 						{/if}
 					</div>
@@ -838,14 +835,14 @@
 								<div class="flex items-center gap-2 flex-wrap">
 									<span class="badge badge-primary badge-sm">{SUBMISSION_TYPE_LABELS[sub.type]}</span>
 									{#if sub.fileCount > 0}
-										<span class="badge badge-ghost badge-sm">{sub.fileCount} file{sub.fileCount !== 1 ? 's' : ''}</span>
+										<span class="badge badge-ghost badge-sm">{sub.fileCount} {sub.fileCount !== 1 ? m.submissions_files_badge_plural() : m.submissions_file_badge_singular()}</span>
 									{/if}
 									<span class="text-xs font-mono opacity-60">ID: {sub.id}</span>
 								</div>
 								<div class="text-right">
 									<span class="text-xs opacity-60">{formatDate(sub.createdAt)}</span>
 									{#if sub.contentDate}
-										<div class="text-xs opacity-50">Content: {sub.contentDate}</div>
+										<div class="text-xs opacity-50">{m.submissions_content_label()} {sub.contentDate}</div>
 									{/if}
 								</div>
 							</div>
@@ -888,18 +885,18 @@
 						onclick={() => (currentPage = Math.max(1, currentPage - 1))}
 						disabled={currentPage === 1}
 					>
-						‹ Prev
+						{m.submissions_prev()}
 					</button>
 					<span class="text-sm text-base-content/60">
-						Page {currentPage} of {totalPages}
-						({filteredSortedIds.length} result{filteredSortedIds.length !== 1 ? 's' : ''})
+						{m.submissions_page()} {currentPage} {m.submissions_export_of()} {totalPages}
+						({filteredSortedIds.length} {filteredSortedIds.length !== 1 ? m.submissions_results_plural() : m.submissions_results_singular()})
 					</span>
 					<button
 						class="btn btn-sm btn-ghost"
 						onclick={() => (currentPage = Math.min(totalPages, currentPage + 1))}
 						disabled={currentPage === totalPages}
 					>
-						Next ›
+						{m.submissions_next()}
 					</button>
 				</div>
 			{/if}

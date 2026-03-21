@@ -43,7 +43,7 @@
 
 		try {
 			if (fragmentData.v === 1) {
-				formError = 'Legacy backup (v1) cannot be restored without project context. Please re-register using your invite link.';
+				formError = m.import_legacy_backup();
 				return;
 			}
 
@@ -56,7 +56,7 @@
 				const plaintext = await decryptSymmetric(key, fragmentData.encrypted);
 				memberships = JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, StoredMembership>;
 			} catch {
-				formError = 'Wrong passphrase — decryption failed';
+				formError = m.import_wrong_passphrase();
 				return;
 			}
 
@@ -67,7 +67,7 @@
 
 			mode = 'success';
 		} catch (err) {
-			formError = err instanceof Error ? err.message : 'Import failed';
+			formError = err instanceof Error ? err.message : m.import_failed();
 		} finally {
 			importing = false;
 		}
@@ -88,17 +88,17 @@
 		</div>
 
 	{:else if mode === 'prompt'}
-		<p class="text-base-content/60 text-sm">Enter the passphrase used when the link was generated.</p>
+		<p class="text-base-content/60 text-sm">{m.import_enter_passphrase()}</p>
 		<form class="flex flex-col gap-4" onsubmit={handleImport}>
 			<label class="flex flex-col gap-1">
 				<span class="label-text font-medium">{m.import_passphrase_label()}</span>
 				<input
 					type="password"
 					class="input input-bordered"
-					placeholder="Enter passphrase"
+					placeholder={m.import_passphrase_placeholder()}
 					bind:value={passphrase}
 					required
-					aria-label="Passphrase"
+					aria-label={m.import_passphrase_label()}
 					data-testid="passphrase-input"
 				/>
 			</label>
@@ -117,7 +117,7 @@
 		<div role="status" class="alert alert-success">
 			<span>{m.import_success()}</span>
 		</div>
-		<a href="/dashboard" class="btn btn-primary">Go to dashboard</a>
+		<a href="/dashboard" class="btn btn-primary">{m.import_go_dashboard()}</a>
 
 	{:else if mode === 'error'}
 		<div role="alert" class="alert alert-error">

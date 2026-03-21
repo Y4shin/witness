@@ -17,6 +17,7 @@
 	import type { EncryptedKey } from '$lib/crypto/asymmetric';
 	import type { MemberRecord } from '$lib/api-types';
 	import type { PageData } from './$types';
+	import * as m from '$lib/paraglide/messages';
 
 	let { data }: { data: PageData } = $props();
 
@@ -120,15 +121,15 @@
 		{/if}
 
 		{#if members.length === 0}
-			<p class="text-base-content/60">No members found.</p>
+			<p class="text-base-content/60">{m.members_no_members()}</p>
 		{:else}
 			<div class="overflow-x-auto max-w-2xl">
 				<table class="table">
 					<thead>
 						<tr>
-							<th>Member ID</th>
-							<th>Role</th>
-							<th>Joined</th>
+							<th>{m.members_member_id_col()}</th>
+							<th>{m.members_role()}</th>
+							<th>{m.members_joined()}</th>
 							<th></th>
 						</tr>
 					</thead>
@@ -153,7 +154,7 @@
 											{#if promoting === member.memberId}
 												<span class="loading loading-spinner loading-xs"></span>
 											{:else}
-												Promote
+												{m.members_promote_btn()}
 											{/if}
 										</button>
 									{/if}

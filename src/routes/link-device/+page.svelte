@@ -4,6 +4,7 @@
 	import { loadMemberships, hasMemberships, saveMembership } from '$lib/client/key-store';
 	import QrCode from '$lib/components/QrCode.svelte';
 	import type { StoredMembership } from '$lib/client/key-store';
+import * as m from '$lib/paraglide/messages';
 
 	export const ssr = false;
 
@@ -45,8 +46,8 @@
 	async function handleGenerateLink(e: SubmitEvent) {
 		e.preventDefault();
 		linkError = '';
-		if (linkPassphrase.length < 8) { linkError = 'Passphrase must be at least 8 characters'; return; }
-		if (linkPassphrase !== linkPassphraseConfirm) { linkError = 'Passphrases do not match'; return; }
+		if (linkPassphrase.length < 8) { linkError = m.link_passphrase_min_chars(); return; }
+		if (linkPassphrase !== linkPassphraseConfirm) { linkError = m.link_passphrases_no_match(); return; }
 
 		generating = true;
 		try {
@@ -57,7 +58,7 @@
 				.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 			importUrl = `${window.location.origin}/import#${fragment}`;
 			linkStep = 'generated';
-		} catch { linkError = 'Failed to generate link'; }
+		} catch { linkError = m.link_failed_generate(); }
 		finally { generating = false; }
 	}
 
@@ -66,8 +67,8 @@
 	async function handleExport(e: SubmitEvent) {
 		e.preventDefault();
 		exportError = '';
-		if (exportPassphrase.length < 8) { exportError = 'Passphrase must be at least 8 characters'; return; }
-		if (exportPassphrase !== exportPassphraseConfirm) { exportError = 'Passphrases do not match'; return; }
+		if (exportPassphrase.length < 8) { exportError = m.link_passphrase_min_chars(); return; }
+		if (exportPassphrase !== exportPassphraseConfirm) { exportError = m.link_passphrases_no_match(); return; }
 
 		exporting = true;
 		try {
@@ -82,7 +83,7 @@
 			a.download = 'witness-backup.json';
 			a.click();
 			URL.revokeObjectURL(url);
-		} catch { exportError = 'Export failed'; }
+		} catch { exportError = m.link_export_failed(); }
 		finally { exporting = false; }
 	}
 
@@ -91,7 +92,7 @@
 	async function handleImport(e: SubmitEvent) {
 		e.preventDefault();
 		importError = '';
-		if (!importFile) { importError = 'Please select a backup file'; return; }
+		if (!importFile) { importError = m.link_import_file_required(); return; }
 
 		importing = true;
 		try {
@@ -101,12 +102,12 @@
 				parsed = JSON.parse(text) as typeof parsed;
 				if (!parsed.v || !parsed.salt || !parsed.encrypted) throw new Error('missing fields');
 			} catch {
-				importError = 'Invalid backup file — missing required fields';
+				importError = m.link_import_invalid_file();
 				return;
 			}
 
 			if (parsed.v === 1) {
-				importError = 'Legacy backup (v1) cannot be restored without project context. Please re-register using your invite link.';
+				importError = m.link_legacy_backup();
 				return;
 			}
 
@@ -118,7 +119,7 @@
 				const plaintext = await decryptSymmetric(key, parsed.encrypted);
 				memberships = JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, StoredMembership>;
 			} catch {
-				importError = 'Wrong passphrase — decryption failed';
+				importError = m.link_import_wrong_passphrase();
 				return;
 			}
 
@@ -128,19 +129,19 @@
 			}
 			importSuccess = true;
 		} catch (err) {
-			importError = err instanceof Error ? err.message : 'Import failed';
+			importError = err instanceof Error ? err.message : m.link_import_failed();
 		} finally {
 			importing = false;
 		}
 	}
 </script>
 
-<svelte:head><title>Witness – Key Management</title></svelte:head>
+<svelte:head><title>Witness – {m.link_device_title()}</title></svelte:head>
 
 <div class="mx-auto max-w-lg p-6 flex flex-col gap-6">
 	<div>
-		<a href="/dashboard" class="text-sm text-base-content/50 hover:text-base-content mb-2 inline-block">← Dashboard</a>
-		<h1 class="text-2xl font-bold">Key management</h1>
+		<a href="/dashboard" class="text-sm text-base-content/50 hover:text-base-content mb-2 inline-block">{m.back_dashboard()}</a>
+		<h1 class="text-2xl font-bold">{m.link_device_title()}</h1>
 	</div>
 
 	{#if mode === 'loading'}
@@ -148,89 +149,89 @@
 
 	{:else if mode === 'nokeys'}
 		<div role="alert" class="alert alert-warning">
-			<span>No memberships found. Please join a project first.</span>
+			<span>{m.link_device_no_keys()}</span>
 		</div>
 
 	{:else}
 		<div role="tablist" class="tabs tabs-bordered">
-			<button role="tab" class="tab {activeTab === 'link' ? 'tab-active' : ''}" onclick={() => activeTab = 'link'}>Link device</button>
-			<button role="tab" class="tab {activeTab === 'export' ? 'tab-active' : ''}" onclick={() => activeTab = 'export'}>Export backup</button>
-			<button role="tab" class="tab {activeTab === 'import' ? 'tab-active' : ''}" onclick={() => activeTab = 'import'}>Import backup</button>
+			<button role="tab" class="tab {activeTab === 'link' ? 'tab-active' : ''}" onclick={() => activeTab = 'link'}>{m.link_tab_link()}</button>
+			<button role="tab" class="tab {activeTab === 'export' ? 'tab-active' : ''}" onclick={() => activeTab = 'export'}>{m.link_tab_export()}</button>
+			<button role="tab" class="tab {activeTab === 'import' ? 'tab-active' : ''}" onclick={() => activeTab = 'import'}>{m.link_tab_import()}</button>
 		</div>
 
 		{#if activeTab === 'link'}
-			<p class="text-base-content/60 text-sm">Generate a QR link to securely transfer your memberships to another device in real-time.</p>
+			<p class="text-base-content/60 text-sm">{m.link_description()}</p>
 
 			{#if linkStep === 'form'}
 				<form class="flex flex-col gap-4" onsubmit={handleGenerateLink}>
 					<label class="flex flex-col gap-1">
-						<span class="label-text font-medium">Passphrase</span>
-						<input type="password" class="input input-bordered" placeholder="At least 8 characters" bind:value={linkPassphrase} required minlength={8} aria-label="Passphrase" />
+						<span class="label-text font-medium">{m.link_passphrase_label()}</span>
+						<input type="password" class="input input-bordered" placeholder={m.link_passphrase_placeholder()} bind:value={linkPassphrase} required minlength={8} aria-label={m.link_passphrase_label()} />
 					</label>
 					<label class="flex flex-col gap-1">
-						<span class="label-text font-medium">Confirm passphrase</span>
-						<input type="password" class="input input-bordered" bind:value={linkPassphraseConfirm} required aria-label="Confirm passphrase" />
+						<span class="label-text font-medium">{m.link_confirm_passphrase_label()}</span>
+						<input type="password" class="input input-bordered" bind:value={linkPassphraseConfirm} required aria-label={m.link_confirm_passphrase_label()} />
 					</label>
 					{#if linkError}<div role="alert" class="alert alert-error text-sm"><span>{linkError}</span></div>{/if}
 					<button type="submit" class="btn btn-primary" disabled={generating} data-testid="generate-link-btn">
 						{#if generating}<span class="loading loading-spinner loading-sm"></span>{/if}
-						Generate link
+						{m.link_generate_btn()}
 					</button>
 				</form>
 			{:else}
 				<div class="flex flex-col gap-4">
-					<div role="status" class="alert alert-success text-sm"><span>Link generated! Open it on your other device and enter the passphrase.</span></div>
+					<div role="status" class="alert alert-success text-sm"><span>{m.link_generated_success()}</span></div>
 					<label class="flex flex-col gap-1">
-						<span class="label-text text-sm font-medium">Import link</span>
-						<input type="text" readonly class="input input-bordered font-mono text-xs" value={importUrl} onclick={(e) => (e.target as HTMLInputElement).select()} aria-label="Import link URL" data-testid="import-url" />
+						<span class="label-text text-sm font-medium">{m.link_import_link_label()}</span>
+						<input type="text" readonly class="input input-bordered font-mono text-xs" value={importUrl} onclick={(e) => (e.target as HTMLInputElement).select()} aria-label={m.link_import_link_label()} data-testid="import-url" />
 					</label>
 					<div class="flex justify-center"><QrCode value={importUrl} /></div>
-					<p class="text-xs text-base-content/50 text-center">Keep the passphrase secret and do not share the link publicly.</p>
-					<button class="btn btn-ghost btn-sm" onclick={() => { linkStep = 'form'; linkPassphrase = ''; linkPassphraseConfirm = ''; }}>Generate a new link</button>
+					<p class="text-xs text-base-content/50 text-center">{m.link_keep_secret()}</p>
+					<button class="btn btn-ghost btn-sm" onclick={() => { linkStep = 'form'; linkPassphrase = ''; linkPassphraseConfirm = ''; }}>{m.link_generate_new()}</button>
 				</div>
 			{/if}
 
 		{:else if activeTab === 'export'}
-			<p class="text-base-content/60 text-sm">Download an encrypted backup of all your project memberships. Store the file safely — you will need the passphrase to restore it.</p>
+			<p class="text-base-content/60 text-sm">{m.link_export_description()}</p>
 			<form class="flex flex-col gap-4" onsubmit={handleExport}>
 				<label class="flex flex-col gap-1">
-					<span class="label-text font-medium">Passphrase</span>
-					<input type="password" class="input input-bordered" placeholder="At least 8 characters" bind:value={exportPassphrase} required minlength={8} aria-label="Export passphrase" />
+					<span class="label-text font-medium">{m.link_passphrase_label()}</span>
+					<input type="password" class="input input-bordered" placeholder={m.link_passphrase_placeholder()} bind:value={exportPassphrase} required minlength={8} aria-label={m.link_passphrase_label()} />
 				</label>
 				<label class="flex flex-col gap-1">
-					<span class="label-text font-medium">Confirm passphrase</span>
-					<input type="password" class="input input-bordered" bind:value={exportPassphraseConfirm} required aria-label="Confirm export passphrase" />
+					<span class="label-text font-medium">{m.link_confirm_passphrase_label()}</span>
+					<input type="password" class="input input-bordered" bind:value={exportPassphraseConfirm} required aria-label={m.link_confirm_passphrase_label()} />
 				</label>
 				{#if exportError}<div role="alert" class="alert alert-error text-sm"><span>{exportError}</span></div>{/if}
 				<button type="submit" class="btn btn-primary" disabled={exporting} data-testid="export-btn">
 					{#if exporting}<span class="loading loading-spinner loading-sm"></span>{/if}
-					Download backup
+					{m.link_export_download_btn()}
 				</button>
 			</form>
 
 		{:else if activeTab === 'import'}
-			<p class="text-base-content/60 text-sm">Restore memberships from a previously exported backup file.</p>
+			<p class="text-base-content/60 text-sm">{m.link_import_description()}</p>
 			{#if importSuccess}
 				<div role="status" class="alert alert-success">
-					<span>Memberships imported successfully!</span>
-					<a href="/dashboard" class="btn btn-sm btn-ghost ml-2">Go to dashboard</a>
+					<span>{m.link_import_success()}</span>
+					<a href="/dashboard" class="btn btn-sm btn-ghost ml-2">{m.link_go_dashboard()}</a>
 				</div>
 			{:else}
 				<form class="flex flex-col gap-4" onsubmit={handleImport}>
 					<label class="flex flex-col gap-1">
-						<span class="label-text font-medium">Backup file (.json)</span>
+						<span class="label-text font-medium">{m.link_import_file_label()}</span>
 						<input type="file" accept=".json,application/json" class="file-input file-input-bordered file-input-sm"
 							onchange={(e) => importFile = (e.target as HTMLInputElement).files?.[0] ?? null}
-							aria-label="Backup file" data-testid="import-file-input" />
+							aria-label={m.link_import_file_label()} data-testid="import-file-input" />
 					</label>
 					<label class="flex flex-col gap-1">
-						<span class="label-text font-medium">Passphrase</span>
-						<input type="password" class="input input-bordered" bind:value={importPassphrase} required aria-label="Import passphrase" data-testid="import-passphrase-input" />
+						<span class="label-text font-medium">{m.link_import_passphrase_label()}</span>
+						<input type="password" class="input input-bordered" bind:value={importPassphrase} required aria-label={m.link_import_passphrase_label()} data-testid="import-passphrase-input" />
 					</label>
 					{#if importError}<div role="alert" class="alert alert-error text-sm"><span>{importError}</span></div>{/if}
 					<button type="submit" class="btn btn-primary" disabled={importing || !importFile} data-testid="import-file-btn">
 						{#if importing}<span class="loading loading-spinner loading-sm"></span>{/if}
-						Import backup
+						{m.link_import_btn()}
 					</button>
 				</form>
 			{/if}

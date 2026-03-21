@@ -1,4 +1,6 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
+
 	interface Props {
 		onsubmit: (data: { name: string; contact: string }) => void;
 		disabled?: boolean;
@@ -21,26 +23,26 @@
 
 <form onsubmit={handleSubmit} class="flex flex-col gap-4">
 	<label class="form-control">
-		<span class="label-text mb-1">Name</span>
+		<span class="label-text mb-1">{m.auth_name_label()}</span>
 		<input
 			class="input input-bordered"
 			type="text"
 			bind:value={name}
-			placeholder="Your name"
+			placeholder={m.auth_name_placeholder()}
 			required
-			aria-label="Name"
+			aria-label={m.auth_name_label()}
 		/>
 	</label>
 
 	<label class="form-control">
-		<span class="label-text mb-1">Contact</span>
+		<span class="label-text mb-1">{m.auth_contact_label()}</span>
 		<input
 			class="input input-bordered"
 			type="text"
 			bind:value={contact}
-			placeholder="Email or other contact info"
+			placeholder={m.auth_contact_placeholder()}
 			required
-			aria-label="Contact"
+			aria-label={m.auth_contact_label()}
 		/>
 	</label>
 
@@ -49,6 +51,6 @@
 	{/if}
 
 	<button class="btn btn-primary" type="submit" disabled={!canSubmit}>
-		{disabled ? 'Registering…' : 'Register'}
+		{disabled ? m.auth_registering() : m.auth_register_btn()}
 	</button>
 </form>

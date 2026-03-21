@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { FormField, FieldType } from '$lib/api-types';
 	import { api, ApiError } from '$lib/client/api';
+	import * as m from '$lib/paraglide/messages';
 
 	let { projectId, fields: initialFields = [] }: {
 		projectId: string;
@@ -24,14 +25,14 @@
 	async function addField() {
 		const label = newLabel.trim();
 		if (!label) {
-			addError = 'Label is required';
+			addError = m.fields_label_required();
 			return;
 		}
 
 		if (newType === 'SELECT') {
 			const opts = newOptions.split(',').map((o) => o.trim()).filter(Boolean);
 			if (opts.length === 0) {
-				addError = 'SELECT fields require at least one option';
+				addError = m.fields_select_options_required();
 				return;
 			}
 		}
@@ -57,7 +58,7 @@
 			newOptions = '';
 			newRequired = false;
 		} catch (err) {
-			addError = err instanceof ApiError ? err.message : 'Failed to add field';
+			addError = err instanceof ApiError ? err.message : m.fields_add_failed();
 		}
 		adding = false;
 	}
@@ -110,11 +111,11 @@
 						<span class="font-medium">{field.label}</span>
 						<span class="badge badge-ghost badge-sm ml-2">{field.type}</span>
 						{#if field.required}
-							<span class="badge badge-warning badge-sm ml-1">required</span>
+							<span class="badge badge-warning badge-sm ml-1">{m.fields_required_badge()}</span>
 						{/if}
 						{#if field.type === 'SELECT' && field.options}
 							<p class="mt-1 text-xs text-base-content/60">
-								Options: {JSON.parse(field.options).join(', ')}
+								{m.fields_options_prefix()} {JSON.parse(field.options).join(', ')}
 							</p>
 						{/if}
 					</div>
@@ -141,48 +142,48 @@
 			{/each}
 		</ul>
 	{:else}
-		<p class="text-base-content/50 text-sm">No fields yet. Add your first field below.</p>
+		<p class="text-base-content/50 text-sm">{m.fields_no_fields()}</p>
 	{/if}
 
 	<!-- Add field form -->
 	<div class="rounded-lg border border-base-300 bg-base-200 p-4">
-		<h2 class="mb-3 font-semibold">Add field</h2>
+		<h2 class="mb-3 font-semibold">{m.fields_add_field_title()}</h2>
 
 		<div class="flex flex-col gap-3">
 			<label class="flex flex-col gap-1">
-				<span class="label-text text-sm">Label</span>
+				<span class="label-text text-sm">{m.fields_label_label()}</span>
 				<input
 					type="text"
 					class="input input-bordered input-sm w-full"
 					bind:value={newLabel}
-					aria-label="Field label"
-					placeholder="e.g. Full name"
+					aria-label={m.fields_label_label()}
+					placeholder={m.fields_label_placeholder()}
 				/>
 			</label>
 
 			<label class="flex flex-col gap-1">
-				<span class="label-text text-sm">Type</span>
+				<span class="label-text text-sm">{m.fields_type_label()}</span>
 				<select
 					class="select select-bordered select-sm w-full"
 					bind:value={newType}
-					aria-label="Field type"
+					aria-label={m.fields_type_label()}
 				>
-					<option value="TEXT">Text</option>
-					<option value="SELECT">Select</option>
-					<option value="FILE">File</option>
-					<option value="DATE">Date</option>
+					<option value="TEXT">{m.fields_type_text()}</option>
+					<option value="SELECT">{m.fields_type_select()}</option>
+					<option value="FILE">{m.fields_type_file()}</option>
+					<option value="DATE">{m.fields_type_date()}</option>
 				</select>
 			</label>
 
 			{#if showOptionsInput}
 				<label class="flex flex-col gap-1">
-					<span class="label-text text-sm">Options (comma-separated)</span>
+					<span class="label-text text-sm">{m.fields_options_label()}</span>
 					<input
 						type="text"
 						class="input input-bordered input-sm w-full"
 						bind:value={newOptions}
-						aria-label="Options"
-						placeholder="e.g. Option A, Option B"
+						aria-label={m.fields_options_label()}
+						placeholder={m.fields_options_placeholder()}
 					/>
 				</label>
 			{/if}
@@ -192,9 +193,9 @@
 					type="checkbox"
 					class="checkbox checkbox-sm"
 					bind:checked={newRequired}
-					aria-label="Required"
+					aria-label={m.fields_required_label()}
 				/>
-				<span class="label-text text-sm">Required</span>
+				<span class="label-text text-sm">{m.fields_required_label()}</span>
 			</label>
 
 			{#if addError}
@@ -206,7 +207,7 @@
 				onclick={addField}
 				disabled={adding}
 			>
-				{adding ? 'Adding…' : 'Add field'}
+				{adding ? m.fields_adding() : m.fields_add_btn()}
 			</button>
 		</div>
 	</div>

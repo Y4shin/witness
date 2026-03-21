@@ -25,7 +25,7 @@
 	function goToInvite() {
 		const token = extractToken(inviteInput);
 		if (!token) {
-			inviteError = 'Paste a valid invite link or token.';
+			inviteError = m.dashboard_invalid_invite();
 			return;
 		}
 		window.location.href = `/invite/${token}`;
@@ -77,17 +77,17 @@
 	<div class="divider mt-6"></div>
 
 	<div class="max-w-md">
-		<p class="text-sm font-semibold mb-2">Join another project</p>
+		<p class="text-sm font-semibold mb-2">{m.dashboard_join_another()}</p>
 		<div class="flex gap-2">
 			<input
 				type="text"
 				class="input input-bordered flex-1 text-sm"
-				placeholder="Paste an invite link or token"
+				placeholder={m.dashboard_join_placeholder()}
 				bind:value={inviteInput}
 				oninput={() => (inviteError = '')}
 				onkeydown={(e) => { if (e.key === 'Enter') goToInvite(); }}
 			/>
-			<button class="btn btn-primary btn-sm self-center" onclick={goToInvite}>Go</button>
+			<button class="btn btn-primary btn-sm self-center" onclick={goToInvite}>{m.dashboard_join_btn()}</button>
 		</div>
 		{#if inviteError}
 			<p class="text-error text-sm mt-1">{inviteError}</p>

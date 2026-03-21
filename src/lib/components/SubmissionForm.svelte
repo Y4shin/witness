@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { FormField } from '$lib/api-types';
+	import * as m from '$lib/paraglide/messages';
 
 	let {
 		fields,
@@ -63,7 +64,7 @@
 					aria-required={field.required}
 					{disabled}
 				>
-					<option value="">— select —</option>
+					<option value="">{m.submit_select_placeholder()}</option>
 					{#each JSON.parse(field.options ?? '[]') as opt (opt)}
 						<option value={opt}>{opt}</option>
 					{/each}
@@ -90,6 +91,6 @@
 		class="btn btn-primary"
 		disabled={!allRequiredFilled || submitting || disabled}
 	>
-		{submitting ? 'Submitting…' : 'Submit'}
+		{submitting ? m.submit_submitting() : m.submit_btn()}
 	</button>
 </form>

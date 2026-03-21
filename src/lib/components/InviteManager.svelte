@@ -1,7 +1,8 @@
-﻿<script lang="ts">
+<script lang="ts">
 	import { api, ApiError } from '$lib/client/api';
 	import QrCode from './QrCode.svelte';
 	import type { InviteLinkRecord } from '$lib/api-types';
+	import * as m from '$lib/paraglide/messages';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -84,41 +85,41 @@
 	<!-- Create form -->
 	<div class="card bg-base-200">
 		<div class="card-body">
-			<h2 class="card-title text-lg">Create invite link</h2>
+			<h2 class="card-title text-lg">{m.invite_create_title()}</h2>
 
 			<div class="flex flex-wrap gap-3 items-end">
 				<label class="flex flex-col gap-1">
-					<span class="label-text text-sm">Role</span>
+					<span class="label-text text-sm">{m.invite_role_label()}</span>
 					<select
 						class="select select-bordered select-sm"
 						bind:value={role}
-						aria-label="Role"
+						aria-label={m.invite_role_label()}
 					>
-						<option value="SUBMITTER">Submitter</option>
-						<option value="MODERATOR">Moderator</option>
+						<option value="SUBMITTER">{m.invite_submitter_option()}</option>
+						<option value="MODERATOR">{m.invite_moderator_option()}</option>
 					</select>
 				</label>
 
 				<label class="flex flex-col gap-1">
-					<span class="label-text text-sm">Max uses (optional)</span>
+					<span class="label-text text-sm">{m.invite_max_uses_label()}</span>
 					<input
 						type="text"
 						inputmode="numeric"
 						pattern="[0-9]*"
 						class="input input-bordered input-sm w-28"
-						placeholder="Unlimited"
+						placeholder={m.invite_max_uses_placeholder()}
 						bind:value={maxUsesStr}
-						aria-label="Max uses"
+						aria-label={m.invite_max_uses_label()}
 					/>
 				</label>
 
 				<label class="flex flex-col gap-1">
-					<span class="label-text text-sm">Expires at (optional)</span>
+					<span class="label-text text-sm">{m.invite_expires_label()}</span>
 					<input
 						type="datetime-local"
 						class="input input-bordered input-sm"
 						bind:value={expiresAtStr}
-						aria-label="Expires at"
+						aria-label={m.invite_expires_label()}
 					/>
 				</label>
 
@@ -126,13 +127,13 @@
 					class="btn btn-primary btn-sm"
 					disabled={creating}
 					onclick={handleCreate}
-					aria-label="Create invite link"
+					aria-label={m.invite_create_btn()}
 					data-testid="create-invite-btn"
 				>
 					{#if creating}
 						<span class="loading loading-spinner loading-xs"></span>
 					{:else}
-						Create
+						{m.invite_create_btn()}
 					{/if}
 				</button>
 			</div>
@@ -151,7 +152,7 @@
 			<span>{loadError}</span>
 		</div>
 	{:else if invites.length === 0}
-		<p class="text-base-content/60 text-sm">No active invite links.</p>
+		<p class="text-base-content/60 text-sm">{m.invite_no_links()}</p>
 	{:else}
 		<div class="flex flex-col gap-3">
 			{#each invites as invite (invite.token)}
@@ -168,7 +169,7 @@
 								{/if}
 								{#if invite.expiresAt}
 									<span class="text-xs opacity-60">
-										Expires {new Date(invite.expiresAt).toLocaleDateString()}
+										{m.invite_expires_prefix()} {new Date(invite.expiresAt).toLocaleDateString()}
 									</span>
 								{/if}
 							</div>
@@ -190,7 +191,7 @@
 									{#if revoking === invite.token}
 										<span class="loading loading-spinner loading-xs"></span>
 									{:else}
-										Revoke
+										{m.invite_revoke_btn()}
 									{/if}
 								</button>
 							</div>

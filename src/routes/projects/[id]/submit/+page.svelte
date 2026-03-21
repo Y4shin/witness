@@ -103,7 +103,7 @@
 				mode = 'uploading';
 				for (let i = 0; i < formData.files.length; i++) {
 					const file = formData.files[i];
-					uploadProgress = `Uploading file ${i + 1} of ${formData.files.length}…`;
+					uploadProgress = m.submit_uploading_file() + ' ' + (i + 1) + ' of ' + formData.files.length + '…';
 
 					// Encrypt the file
 					const fileBytes = new Uint8Array(await file.arrayBuffer());
@@ -163,7 +163,7 @@
 
 	{:else if mode === 'success'}
 		<div role="status" class="alert alert-success mx-auto max-w-xl">
-			<span>Your submission was received.</span>
+			<span>{m.submit_success()}</span>
 			<span class="text-xs font-mono opacity-60">ID: {submissionId}</span>
 		</div>
 

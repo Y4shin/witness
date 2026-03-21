@@ -1,4 +1,6 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
+
 	let inviteInput = $state('');
 	let inviteError = $state('');
 
@@ -16,7 +18,7 @@
 	function goToInvite() {
 		const token = extractToken(inviteInput);
 		if (!token) {
-			inviteError = 'Paste a valid invite link or token.';
+			inviteError = m.landing_invalid_invite();
 			return;
 		}
 		window.location.href = `/invite/${token}`;
@@ -29,40 +31,39 @@
 	<div class="text-center max-w-lg">
 		<h1 class="text-4xl font-bold tracking-tight mb-4">Witness</h1>
 		<p class="text-base-content/70 text-lg">
-			A secure platform for collecting evidence and sources.
-			All submissions are end-to-end encrypted — the server never sees your data.
+			{m.landing_tagline()}
 		</p>
 	</div>
 
 	<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl w-full text-sm">
 		<div class="card bg-base-200 p-5">
-			<p class="font-semibold mb-1">End-to-end encrypted</p>
-			<p class="text-base-content/60">Submissions are encrypted in your browser before leaving your device.</p>
+			<p class="font-semibold mb-1">{m.landing_e2e_heading()}</p>
+			<p class="text-base-content/60">{m.landing_e2e_body()}</p>
 		</div>
 		<div class="card bg-base-200 p-5">
-			<p class="font-semibold mb-1">No account required</p>
-			<p class="text-base-content/60">Access is granted via invite links. No passwords, no email sign-up.</p>
+			<p class="font-semibold mb-1">{m.landing_no_account_heading()}</p>
+			<p class="text-base-content/60">{m.landing_no_account_body()}</p>
 		</div>
 		<div class="card bg-base-200 p-5">
-			<p class="font-semibold mb-1">Your key, your data</p>
-			<p class="text-base-content/60">Your private key lives only in your browser. The server cannot decrypt anything.</p>
+			<p class="font-semibold mb-1">{m.landing_your_key_heading()}</p>
+			<p class="text-base-content/60">{m.landing_your_key_body()}</p>
 		</div>
 	</div>
 
 	<div class="card bg-base-100 shadow w-full max-w-md">
 		<div class="card-body gap-3">
-			<p class="font-semibold">Join a project</p>
-			<p class="text-sm text-base-content/60">Paste an invite link to get started.</p>
+			<p class="font-semibold">{m.landing_join_heading()}</p>
+			<p class="text-sm text-base-content/60">{m.landing_join_subtext()}</p>
 			<div class="flex gap-2">
 				<input
 					type="text"
 					class="input input-bordered flex-1 text-sm"
-					placeholder="https://…/invite/… or paste a token"
+					placeholder={m.landing_join_placeholder()}
 					bind:value={inviteInput}
 					oninput={() => (inviteError = '')}
 					onkeydown={(e) => { if (e.key === 'Enter') goToInvite(); }}
 				/>
-				<button class="btn btn-primary btn-sm self-center" onclick={goToInvite}>Go</button>
+				<button class="btn btn-primary btn-sm self-center" onclick={goToInvite}>{m.landing_join_btn()}</button>
 			</div>
 			{#if inviteError}
 				<p class="text-error text-sm">{inviteError}</p>

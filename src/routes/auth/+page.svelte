@@ -51,14 +51,14 @@
 
 	async function performLoginForProject(pid: string, bundle: UserKeyBundleJwk): Promise<void> {
 		mode = 'login';
-		statusMessage = 'Authenticating…';
+		statusMessage = m.auth_status_authenticating();
 		try {
 			const keys = await importUserKeyBundleJwk(bundle);
 			const spkJwk = jwkToString(await exportPublicKeyJwk(keys.signing.publicKey));
 			await challengeResponse(keys.signing.privateKey, spkJwk);
 			await goto(nextUrl ?? `/projects/${pid}`);
 		} catch (err) {
-			formError = err instanceof ApiError ? err.message : 'Login failed';
+			formError = err instanceof ApiError ? err.message : m.auth_login_failed();
 			mode = 'error';
 		}
 	}
@@ -67,7 +67,7 @@
 
 	async function handleRegister(data: { name: string; contact: string }): Promise<void> {
 		if (!projectId || !inviteToken || !role) {
-			formError = 'Missing project context. Please use a valid invite link.';
+			formError = m.auth_missing_context();
 			return;
 		}
 
@@ -75,7 +75,7 @@
 		formError = '';
 
 		try {
-			statusMessage = 'Generating keys…';
+			statusMessage = m.auth_status_generating_keys();
 			const bundle = await generateUserKeyBundle();
 			const jwks = await exportUserKeyBundleJwk(bundle);
 
@@ -98,7 +98,7 @@
 					projectPublicKey = await importEcdhPublicKey(stringToJwk(existingKeyStr));
 				} else {
 					// First MODERATOR: generate the project keypair
-					statusMessage = 'Generating project keys…';
+					statusMessage = m.auth_status_generating_project_keys();
 					const projectKeyPair = await generateProjectKeyPair();
 					const projectPubJwk = await exportPublicKeyJwk(projectKeyPair.publicKey);
 					projectPublicKey = projectKeyPair.publicKey;
@@ -115,20 +115,20 @@
 				}
 			} else {
 				// Submitter: project must already have a public key
-				statusMessage = 'Fetching project public key…';
+				statusMessage = m.auth_status_fetching_project_key();
 				try {
 					const resp = await api.projects.getPublicKey(projectId);
 					projectPublicKey = await importEcdhPublicKey(stringToJwk(resp.publicKey));
 				} catch (err) {
 					if (err instanceof ApiError && err.status === 404) {
-						throw new Error('This project is not ready yet. Please contact the project admin.');
+						throw new Error(m.auth_project_not_ready());
 					}
 					throw err;
 				}
 			}
 
 			// ── Encrypt name + contact with project public key ─────────────────
-			statusMessage = 'Encrypting your data…';
+			statusMessage = m.auth_status_encrypting();
 			const [nameKey, contactKey] = await Promise.all([
 				generateSymmetricKey(),
 				generateSymmetricKey()
@@ -145,7 +145,7 @@
 			const encryptedContact = JSON.stringify({ payload: encryptedContactPayload, key: encryptedContactKey });
 
 			// ── Join project (creates member, consumes invite) ─────────────────
-			statusMessage = 'Joining project…';
+			statusMessage = m.auth_status_joining();
 			const joinResp = await api.memberships.join({
 				inviteToken,
 				signingPublicKey: jwkToString(jwks.signingPublicKey),
@@ -156,12 +156,12 @@
 			});
 
 			// ── Authenticate (get session cookie) ──────────────────────────────
-			statusMessage = 'Authenticating…';
+			statusMessage = m.auth_status_authenticating();
 			await challengeResponse(bundle.signing.privateKey, jwkToString(jwks.signingPublicKey));
 
 			// ── Upload project public key now that we are authenticated ─────────
 			if (pendingProjectPublicKeyJwk) {
-				statusMessage = 'Uploading project key…';
+				statusMessage = m.auth_status_uploading_key();
 				await api.projects.setPublicKey(projectId, { publicKey: pendingProjectPublicKeyJwk });
 			}
 
@@ -169,7 +169,7 @@
 			saveMembership(joinResp.projectId, jwks, joinResp.projectName, joinResp.role);
 			await goto(nextUrl ?? '/dashboard');
 		} catch (err) {
-			formError = err instanceof ApiError ? err.message : (err instanceof Error ? err.message : 'Registration failed');
+			formError = err instanceof ApiError ? err.message : (err instanceof Error ? err.message : m.auth_registration_failed());
 			mode = 'register';
 		}
 	}
@@ -214,9 +214,9 @@
 
 			{:else if mode === 'nocontext'}
 				<div role="alert" class="alert alert-warning">
-					<span>No invite link found. Please use a valid invite link to join a project.</span>
+					<span>{m.auth_no_invite()}</span>
 				</div>
-				<a href="/" class="btn btn-outline mt-2">Go home</a>
+				<a href="/" class="btn btn-outline mt-2">{m.auth_go_home()}</a>
 
 			{:else if mode === 'onboarding'}
 				<h1 class="card-title text-xl mb-4">{m.privacy_title()}</h1>
@@ -252,7 +252,7 @@
 				<h1 class="card-title text-2xl mb-4">{m.auth_register_title()}</h1>
 				{#if !projectId || !inviteToken}
 					<div role="alert" class="alert alert-warning">
-						<span>No project context found. Please use a valid invite link.</span>
+						<span>{m.auth_no_project_context()}</span>
 					</div>
 				{:else}
 					<RegistrationForm onsubmit={handleRegister} error={formError} />
@@ -269,7 +269,7 @@
 					<div role="alert" class="alert alert-error">
 						<span>{formError}</span>
 					</div>
-					<button class="btn btn-outline" onclick={handleStartOver}>Start over</button>
+					<button class="btn btn-outline" onclick={handleStartOver}>{m.auth_start_over()}</button>
 				</div>
 			{/if}
 		</div>

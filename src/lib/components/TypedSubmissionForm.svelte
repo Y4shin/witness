@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { SUBMISSION_TYPES, getTypeDef } from '$lib/submission-types';
 	import type { SubmissionType, FormField } from '$lib/api-types';
+	import * as m from '$lib/paraglide/messages';
 
 	interface Props {
 		formFields?: FormField[];
@@ -72,8 +73,8 @@
 <form class="flex flex-col gap-4" onsubmit={handleSubmit}>
 	<!-- Type selector -->
 	<label class="flex flex-col gap-1">
-		<span class="label-text font-medium">Submission type</span>
-		<select class="select select-bordered" bind:value={selectedType} aria-label="Submission type">
+		<span class="label-text font-medium">{m.submit_type_label()}</span>
+		<select class="select select-bordered" bind:value={selectedType} aria-label={m.submit_type_label()}>
 			{#each SUBMISSION_TYPES as t (t.value)}
 				<option value={t.value}>{t.label}</option>
 			{/each}
@@ -85,7 +86,7 @@
 		<label class="flex flex-col gap-1">
 			<span class="label-text font-medium">
 				{field.label}
-				{#if !field.required}<span class="text-base-content/50 text-xs">(optional)</span>{/if}
+				{#if !field.required}<span class="text-base-content/50 text-xs">{m.submit_optional()}</span>{/if}
 			</span>
 			{#if field.key === 'notes'}
 				<textarea
@@ -113,7 +114,7 @@
 		<label class="flex flex-col gap-1">
 			<span class="label-text font-medium">
 				{field.label}
-				{#if !field.required}<span class="text-base-content/50 text-xs">(optional)</span>{/if}
+				{#if !field.required}<span class="text-base-content/50 text-xs">{m.submit_optional()}</span>{/if}
 			</span>
 			{#if field.type === 'SELECT'}
 				<select
@@ -122,7 +123,7 @@
 					required={field.required}
 					aria-label={field.label}
 				>
-					<option value="">— select —</option>
+					<option value="">{m.submit_select_placeholder()}</option>
 					{#each (JSON.parse(field.options ?? '[]') as string[]) as opt (opt)}
 						<option value={opt}>{opt}</option>
 					{/each}
@@ -149,7 +150,7 @@
 
 	<!-- File uploads -->
 	<div class="flex flex-col gap-2">
-		<span class="label-text font-medium">Evidence files (screenshots, etc.)</span>
+		<span class="label-text font-medium">{m.submit_files_label()}</span>
 		{#if pendingFiles.length > 0}
 			<ul class="flex flex-col gap-1">
 				{#each pendingFiles as file, i (i)}
@@ -172,7 +173,7 @@
 			accept="image/*,video/*,application/pdf"
 			class="file-input file-input-bordered file-input-sm"
 			onchange={handleFileChange}
-			aria-label="Attach evidence files"
+			aria-label={m.submit_files_attach_label()}
 		/>
 	</div>
 
@@ -190,9 +191,9 @@
 	>
 		{#if submitting}
 			<span class="loading loading-spinner loading-sm"></span>
-			Submitting…
+			{m.submit_submitting()}
 		{:else}
-			Submit
+			{m.submit_btn()}
 		{/if}
 	</button>
 </form>
