@@ -14,7 +14,6 @@ import type { UploadFileRequest, UploadFileResponse, GetFilesResponse } from '$l
  */
 export const GET: RequestHandler = async ({ params, locals }) => {
 	if (!locals.member) throw error(401, 'Authentication required');
-	if (locals.member.role !== 'MODERATOR') throw error(403, 'Only moderators can list file records');
 
 	const submission = await db.submission.findUnique({
 		where: { id: params.id },
@@ -23,6 +22,13 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	if (!submission) throw error(404, 'Submission not found');
 	if (submission.projectId !== locals.member.projectId) throw error(403, 'Not a member of this project');
 
+	// Submitters can only list files for their own submissions
+	if (locals.member.role === 'SUBMITTER' && submission.memberId !== locals.member.id) {
+		throw error(403, 'Submitters can only access their own submissions');
+	}
+
+	const isModerator = locals.member.role === 'MODERATOR';
+
 	return json({
 		files: submission.files.map((f) => ({
 			id: f.id,
@@ -30,7 +36,8 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 			mimeType: f.mimeType,
 			sizeBytes: f.sizeBytes,
 			createdAt: f.createdAt.toISOString(),
-			encryptedKey: f.encryptedKey
+			// Moderators decrypt with the project key; submitters with their own user key
+			encryptedKey: isModerator ? f.encryptedKey : f.encryptedKeyUser
 		}))
 	} satisfies GetFilesResponse);
 };

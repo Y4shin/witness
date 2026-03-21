@@ -62,6 +62,7 @@
 	let refreshing = $state(false);
 	let searchIndex = $state<AnyOrama | null>(null);
 	let projectPrivateKey = $state<CryptoKey | null>(null);
+	let userEncryptionPrivateKey = $state<CryptoKey | null>(null);
 
 	// ── Export state ───────────────────────────────────────────────────────
 
@@ -207,6 +208,7 @@
 
 		try {
 			const userBundle = await importUserKeyBundleJwk(membership.bundle);
+			userEncryptionPrivateKey = userBundle.encryption.privateKey;
 
 			const [cacheDb, cacheKey] = await Promise.all([
 				openCacheDb(),
@@ -464,10 +466,12 @@
 						filename: packed.filename
 					};
 
-					// Fetch encrypted bytes and decrypt using project private key
+					// Fetch encrypted bytes and decrypt using the caller's private key:
+					// moderators use the project key; submitters use their own user key
 					const encBytes = await api.files.downloadEncrypted(file.submissionId, file.fileId);
 					const encKey = JSON.parse(fileKeys.get(file.fileId)!) as EncryptedKey;
-					const symKey = await decryptSymmetricKey(encKey, projectPrivateKey!);
+					const decryptionKey = data.role === 'MODERATOR' ? projectPrivateKey! : userEncryptionPrivateKey!;
+					const symKey = await decryptSymmetricKey(encKey, decryptionKey);
 					const iv = encBytes.slice(0, 12);
 					const ciphertext = encBytes.slice(12);
 					const decrypted = new Uint8Array(
@@ -602,16 +606,14 @@
 					</button>
 				</div>
 
-				{#if data.role === 'MODERATOR'}
-					<button
-						class="btn btn-sm btn-ghost border border-base-300"
-						onclick={runExport}
-						disabled={exportPhase.kind !== 'idle' || filteredSortedIds.length === 0}
-						aria-label="Export submissions"
-					>
-						↓ Export
-					</button>
-				{/if}
+				<button
+					class="btn btn-sm btn-ghost border border-base-300"
+					onclick={runExport}
+					disabled={exportPhase.kind !== 'idle' || filteredSortedIds.length === 0}
+					aria-label="Export submissions"
+				>
+					↓ Export
+				</button>
 			</div>
 
 			<!-- ── Export progress panel ──────────────────────────────────────── -->

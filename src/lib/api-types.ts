@@ -230,9 +230,14 @@ export interface PromoteResponse {
 
 // ── GET /api/submissions/[id]/files ───────────────────────────────────────
 
-/** File record returned to moderators — includes the project-wrapped key for decryption. */
+/**
+ * File record returned to moderators and submitters (for their own submissions).
+ * `encryptedKey` is the caller's decryption key:
+ *   - MODERATOR: the project-wrapped symmetric key
+ *   - SUBMITTER: their personal user-wrapped symmetric key
+ */
 export interface FileRecordWithKey extends FileRecord {
-	encryptedKey: string; // JSON-serialised SubmissionKeyBundle (project public key)
+	encryptedKey: string; // JSON-serialised SubmissionKeyBundle wrapped for the caller
 }
 
 export interface GetFilesResponse {
