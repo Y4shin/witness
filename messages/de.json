@@ -238,5 +238,8 @@
 	"demo_paraglide_link": "paraglide",
 	"demo_playwright_link": "playwright",
 	"demo_vscode_tip": "Wenn Sie VSCode verwenden, installieren Sie die Sherlock-i18n-Erweiterung für ein besseres i18n-Erlebnis.",
-	"demo_playwright_heading": "Playwright-E2E-Test-Demo"
+	"demo_playwright_heading": "Playwright-E2E-Test-Demo",
+	"offline_title": "Keine Internetverbindung",
+	"offline_message": "Überprüfe deine Internetverbindung und versuche es erneut.",
+	"offline_retry": "Erneut versuchen"
 }
