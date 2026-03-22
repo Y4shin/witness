@@ -35,9 +35,9 @@ export interface StorageBackend {
 // ── Local filesystem backend ─────────────────────────────────────────────────
 
 import { writeFile, readFile, mkdir, rm } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { join, dirname, isAbsolute } from 'node:path';
 
-class LocalBackend implements StorageBackend {
+export class LocalBackend implements StorageBackend {
 	async write(key: string, data: Uint8Array): Promise<void> {
 		const path = join('uploads', key);
 		await mkdir(dirname(path), { recursive: true });
@@ -45,15 +45,15 @@ class LocalBackend implements StorageBackend {
 	}
 
 	async read(key: string): Promise<Uint8Array> {
-		// Support legacy absolute/relative paths stored before this abstraction
-		// was introduced (they start with 'uploads/' or '/').
-		const isLegacyPath = key.startsWith('/') || key.startsWith('uploads/') || key.startsWith('uploads\\');
+		// Support legacy paths stored before this abstraction was introduced:
+		// absolute paths (any OS) or keys already prefixed with 'uploads/'.
+		const isLegacyPath = isAbsolute(key) || key.startsWith('uploads/') || key.startsWith('uploads\\');
 		const path = isLegacyPath ? key : join('uploads', key);
 		return new Uint8Array(await readFile(path));
 	}
 
 	async delete(key: string): Promise<void> {
-		const isLegacyPath = key.startsWith('/') || key.startsWith('uploads/') || key.startsWith('uploads\\');
+		const isLegacyPath = isAbsolute(key) || key.startsWith('uploads/') || key.startsWith('uploads\\');
 		const path = isLegacyPath ? key : join('uploads', key);
 		await rm(path, { force: true });
 	}
@@ -68,7 +68,7 @@ import {
 	DeleteObjectCommand
 } from '@aws-sdk/client-s3';
 
-class S3Backend implements StorageBackend {
+export class S3Backend implements StorageBackend {
 	private client: S3Client;
 	private bucket: string;
 
