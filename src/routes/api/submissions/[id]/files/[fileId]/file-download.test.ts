@@ -7,21 +7,33 @@
  *  - 404 when fileId belongs to a different submission (params.id mismatch)
  *  - 403 when file's submission belongs to a different project
  *  - 403 when a SUBMITTER requests a file from another member's submission
- *  - 500 when the file is not present on disk
+ *  - 500 when the storage backend cannot find the file
  *  - 200 with correct raw bytes and headers for MODERATORs
  *  - 200 with correct raw bytes for a SUBMITTER accessing their own file
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createTestDb, type TestDb } from '$lib/server/db/test-utils';
-import { writeFile, mkdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '$lib/server/prisma/client';
 
 // ── db injection via module mock ────────────────────────────────────────────
 let _db: PrismaClient;
 vi.mock('$lib/server/db', () => ({ get db() { return _db; } }));
+
+// ── storage mock ─────────────────────────────────────────────────────────────
+// Replace the storage backend with an in-memory map so tests don't touch disk.
+const _storageMap = new Map<string, Uint8Array>();
+vi.mock('$lib/server/storage', () => ({
+	storage: {
+		read: async (key: string) => {
+			const data = _storageMap.get(key);
+			if (!data) throw new Error(`not found: ${key}`);
+			return data;
+		},
+		write: async (key: string, data: Uint8Array) => { _storageMap.set(key, data); },
+		delete: async (key: string) => { _storageMap.delete(key); }
+	}
+}));
 
 const { GET } = await import('./+server');
 
@@ -30,7 +42,6 @@ const { GET } = await import('./+server');
 function makeModerator(projectId: string) {
 	return { id: 'mod-1', projectId, role: 'MODERATOR' as const };
 }
-
 
 function makeEvent(
 	params: Record<string, string>,
@@ -69,38 +80,37 @@ async function seedSubmission(db: PrismaClient, projectId: string, memberId: str
 	});
 }
 
-/** Creates a real file on disk and a DB record pointing to it. Returns both. */
-async function seedFileOnDisk(
+/** Stores bytes in the in-memory storage mock and creates a matching DB record. */
+async function seedFile(
 	db: PrismaClient,
 	submissionId: string,
-	bytes: Uint8Array,
-	tmpDir: string
+	bytes: Uint8Array
 ) {
-	const filePath = join(tmpDir, `${randomUUID()}.enc`);
-	await writeFile(filePath, bytes);
+	const storageKey = `test/${submissionId}/${randomUUID()}.enc`;
+	_storageMap.set(storageKey, bytes);
 
 	const record = await db.submissionFile.create({
 		data: {
 			submissionId,
 			fieldName: 'evidence',
 			mimeType: 'image/jpeg',
-			storagePath: filePath,
+			storagePath: storageKey,
 			encryptedKey: '{"k":"v"}',
 			encryptedKeyUser: '{"u":"v"}',
 			sizeBytes: bytes.length
 		}
 	});
-	return { record, filePath };
+	return record;
 }
 
-/** Seeds a DB record whose storagePath points to a file that does NOT exist. */
-async function seedFileWithMissingDisk(db: PrismaClient, submissionId: string) {
+/** Seeds a DB record whose storageKey has no corresponding data in the mock. */
+async function seedFileWithMissingData(db: PrismaClient, submissionId: string) {
 	return db.submissionFile.create({
 		data: {
 			submissionId,
 			fieldName: 'evidence',
 			mimeType: 'image/jpeg',
-			storagePath: `/tmp/does-not-exist-${randomUUID()}.enc`,
+			storagePath: `missing/${randomUUID()}.enc`,
 			encryptedKey: '{"k":"v"}',
 			encryptedKeyUser: '{"u":"v"}',
 			sizeBytes: 100
@@ -112,18 +122,15 @@ async function seedFileWithMissingDisk(db: PrismaClient, submissionId: string) {
 
 describe('GET /api/submissions/[id]/files/[fileId]', () => {
 	let testDb: TestDb;
-	let tmpDir: string;
 
 	beforeEach(async () => {
 		testDb = await createTestDb();
 		_db = testDb.db;
-		tmpDir = join(tmpdir(), `rt-file-test-${randomUUID()}`);
-		await mkdir(tmpDir, { recursive: true });
+		_storageMap.clear();
 	});
 
-	afterEach(async () => {
+	afterEach(() => {
 		testDb.cleanup();
-		await rm(tmpDir, { recursive: true, force: true });
 	});
 
 	it('returns 401 when unauthenticated', async () => {
@@ -135,11 +142,8 @@ describe('GET /api/submissions/[id]/files/[fileId]', () => {
 		const project = await seedProject(testDb.db);
 		const owner = await seedMember(testDb.db, project.id);
 		const submission = await seedSubmission(testDb.db, project.id, owner.id);
-		const { record } = await seedFileOnDisk(
-			testDb.db, submission.id, new Uint8Array([1, 2, 3]), tmpDir
-		);
+		const record = await seedFile(testDb.db, submission.id, new Uint8Array([1, 2, 3]));
 
-		// Different submitter — not the owner
 		const other = await seedMember(testDb.db, project.id);
 		const event = makeEvent(
 			{ id: submission.id, fileId: record.id },
@@ -163,14 +167,7 @@ describe('GET /api/submissions/[id]/files/[fileId]', () => {
 		const sub1 = await seedSubmission(testDb.db, project.id, member.id);
 		const sub2 = await seedSubmission(testDb.db, project.id, member.id);
 
-		// File belongs to sub1, but we pass sub2 as params.id
-		const { record } = await seedFileOnDisk(
-			testDb.db,
-			sub1.id,
-			new Uint8Array([1, 2, 3]),
-			tmpDir
-		);
-
+		const record = await seedFile(testDb.db, sub1.id, new Uint8Array([1, 2, 3]));
 		const event = makeEvent(
 			{ id: sub2.id, fileId: record.id },
 			{ member: makeModerator(project.id) }
@@ -183,15 +180,8 @@ describe('GET /api/submissions/[id]/files/[fileId]', () => {
 		const project2 = await seedProject(testDb.db);
 		const member = await seedMember(testDb.db, project1.id);
 		const submission = await seedSubmission(testDb.db, project1.id, member.id);
+		const record = await seedFile(testDb.db, submission.id, new Uint8Array([10, 20]));
 
-		const { record } = await seedFileOnDisk(
-			testDb.db,
-			submission.id,
-			new Uint8Array([10, 20]),
-			tmpDir
-		);
-
-		// Moderator is from project2, file is in project1
 		const event = makeEvent(
 			{ id: submission.id, fileId: record.id },
 			{ member: makeModerator(project2.id) }
@@ -199,11 +189,11 @@ describe('GET /api/submissions/[id]/files/[fileId]', () => {
 		await expect(GET(event)).rejects.toMatchObject({ status: 403 });
 	});
 
-	it('returns 500 when the file is missing from disk', async () => {
+	it('returns 500 when the file is missing from storage', async () => {
 		const project = await seedProject(testDb.db);
 		const member = await seedMember(testDb.db, project.id);
 		const submission = await seedSubmission(testDb.db, project.id, member.id);
-		const record = await seedFileWithMissingDisk(testDb.db, submission.id);
+		const record = await seedFileWithMissingData(testDb.db, submission.id);
 
 		const event = makeEvent(
 			{ id: submission.id, fileId: record.id },
@@ -218,7 +208,7 @@ describe('GET /api/submissions/[id]/files/[fileId]', () => {
 		const submission = await seedSubmission(testDb.db, project.id, member.id);
 
 		const bytes = new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0x00, 0x01, 0x02]);
-		const { record } = await seedFileOnDisk(testDb.db, submission.id, bytes, tmpDir);
+		const record = await seedFile(testDb.db, submission.id, bytes);
 
 		const event = makeEvent(
 			{ id: submission.id, fileId: record.id },
@@ -239,7 +229,7 @@ describe('GET /api/submissions/[id]/files/[fileId]', () => {
 		const owner = await seedMember(testDb.db, project.id);
 		const submission = await seedSubmission(testDb.db, project.id, owner.id);
 		const bytes = new Uint8Array([0xca, 0xfe, 0xba, 0xbe]);
-		const { record } = await seedFileOnDisk(testDb.db, submission.id, bytes, tmpDir);
+		const record = await seedFile(testDb.db, submission.id, bytes);
 
 		const event = makeEvent(
 			{ id: submission.id, fileId: record.id },
@@ -251,19 +241,18 @@ describe('GET /api/submissions/[id]/files/[fileId]', () => {
 		expect(body).toEqual(bytes);
 	});
 
-	it('returns the exact bytes stored on disk (not re-encoded)', async () => {
+	it('returns the exact bytes stored (not re-encoded)', async () => {
 		const project = await seedProject(testDb.db);
 		const member = await seedMember(testDb.db, project.id);
 		const submission = await seedSubmission(testDb.db, project.id, member.id);
 
-		// Simulate encrypted file: iv (12 bytes) + ciphertext (arbitrary)
 		const iv = new Uint8Array(12).fill(0xab);
 		const ciphertext = new Uint8Array(32).fill(0xcd);
 		const combined = new Uint8Array(iv.length + ciphertext.length);
 		combined.set(iv);
 		combined.set(ciphertext, iv.length);
 
-		const { record } = await seedFileOnDisk(testDb.db, submission.id, combined, tmpDir);
+		const record = await seedFile(testDb.db, submission.id, combined);
 		const event = makeEvent(
 			{ id: submission.id, fileId: record.id },
 			{ member: makeModerator(project.id) }

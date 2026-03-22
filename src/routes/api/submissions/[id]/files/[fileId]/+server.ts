@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
-import { readFile } from 'node:fs/promises';
+import { storage } from '$lib/server/storage';
 
 /**
  * GET /api/submissions/[id]/files/[fileId]
@@ -27,9 +27,9 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		throw error(403, 'Submitters can only access their own submissions');
 	}
 
-	let bytes: Buffer;
+	let bytes: Uint8Array;
 	try {
-		bytes = await readFile(file.storagePath);
+		bytes = await storage.read(file.storagePath);
 	} catch {
 		throw error(500, 'File data not found on server');
 	}

@@ -2,8 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { logger } from '$lib/server/logger';
-import { writeFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { storage, makeStorageKey } from '$lib/server/storage';
 import type { UploadFileRequest, UploadFileResponse, GetFilesResponse } from '$lib/api-types';
 
 /**
@@ -86,20 +85,16 @@ export const POST: RequestHandler = async ({ request, locals, params }) => {
 		bytes[i] = binaryStr.charCodeAt(i);
 	}
 
-	// Generate a storage path (fileId will be auto-assigned by DB)
-	const uploadDir = join('uploads', submission.projectId, submissionId!);
 	const fileId = crypto.randomUUID();
-	const storagePath = join(uploadDir, `${fileId}.enc`);
-
-	await mkdir(uploadDir, { recursive: true });
-	await writeFile(storagePath, bytes);
+	const storageKey = makeStorageKey(submission.projectId, submissionId!, fileId);
+	await storage.write(storageKey, bytes);
 
 	const file = await db.submissionFile.create({
 		data: {
 			submissionId: submissionId!,
 			fieldName,
 			mimeType: mimeType ?? null,
-			storagePath,
+			storagePath: storageKey,
 			encryptedKey,
 			encryptedKeyUser,
 			sizeBytes: bytes.length

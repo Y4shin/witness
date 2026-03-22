@@ -50,6 +50,7 @@
 		"vitest-browser-svelte": "^2.0.2"
 	},
 	"dependencies": {
+		"@aws-sdk/client-s3": "^3.1014.0",
 		"@libsql/client": "^0.17.0",
 		"@opentelemetry/api-logs": "^0.213.0",
 		"@opentelemetry/auto-instrumentations-node": "^0.71.0",
