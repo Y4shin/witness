@@ -102,4 +102,48 @@ test.describe('PWA offline page', () => {
 			expect(body).not.toContain("You're offline");
 		}
 	});
+
+	test('previously visited page is served from nav-cache when offline', async ({
+		page,
+		context
+	}) => {
+		// Nav-cache requires a stable SW version (production build).
+		// In dev mode, SvelteKit's HMR may reinstall the SW between the cache write and
+		// the offline reload, causing the activate handler to evict the nav-cache.
+		// Run this test with: npx playwright test --config playwright.pwa.config.ts
+		test.skip(
+			!process.env.TEST_PROD_BUILD,
+			'Requires production build — run with playwright.pwa.config.ts'
+		);
+
+		// First load: SW installs and takes control, but does NOT intercept this navigation
+		// (the SW wasn't controlling when the request was made)
+		await waitForServiceWorker(page, '/');
+
+		// Second load: SW is controlling, so it intercepts, serves the response, and
+		// fire-and-forgets a cache.put into nav-cache.
+		await page.reload();
+		await page.waitForLoadState('networkidle');
+
+		// Wait for the fire-and-forget cache.put to commit before going offline
+		await page.waitForFunction(async () => {
+			const keys = await caches.keys();
+			const navKey = keys.find((k: string) => k.startsWith('nav-cache-'));
+			if (!navKey) return false;
+			const cache = await caches.open(navKey);
+			return (await cache.match(location.href)) !== null;
+		}, undefined, { timeout: 10000 });
+
+		// Go offline and reload — the SW should serve the cached HTML
+		await context.setOffline(true);
+		await page.reload();
+
+		// The page should load from cache (not fall through to the offline page)
+		await expect(page.getByRole('heading', { name: "You're offline" })).not.toBeVisible({
+			timeout: 5000
+		});
+		// Some Witness app content should be present
+		const title = await page.title();
+		expect(title).toContain('Witness');
+	});
 });

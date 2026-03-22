@@ -241,5 +241,20 @@
 	"demo_playwright_heading": "Playwright-E2E-Test-Demo",
 	"offline_title": "Keine Internetverbindung",
 	"offline_message": "Überprüfe deine Internetverbindung und versuche es erneut.",
-	"offline_retry": "Erneut versuchen"
+	"offline_retry": "Erneut versuchen",
+	"submit_queued": "Sie sind offline. Ihre Einreichung wurde gespeichert und wird gesendet, sobald Sie wieder verbunden sind.",
+	"sync_pending_count": "{count} Einreichung(en) ausstehend",
+	"sync_now_btn": "Jetzt synchronisieren",
+	"sync_syncing": "Synchronisiere\u2026",
+	"sync_offline_disabled": "Erneut verbinden, um zu synchronisieren",
+	"submissions_offline_cached": "Sie sind offline \u2013 es werden die zuletzt bekannten Daten angezeigt.",
+	"layout_tab_settings": "Einstellungen",
+	"settings_offline_files_title": "Offline-Datei-Cache",
+	"settings_offline_files_enable": "Heruntergeladene Dateien für den Offline-Zugriff zwischenspeichern",
+	"settings_offline_files_max_size": "Maximale Cache-Größe",
+	"settings_offline_files_types": "Dateien dieser Einreichungstypen speichern",
+	"settings_offline_files_usage": "{mb} MB verwendet",
+	"settings_offline_files_clear": "Cache leeren",
+	"settings_offline_files_cleared": "Cache wurde geleert.",
+	"settings_no_limit": "Kein Limit"
 }

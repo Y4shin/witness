@@ -9,6 +9,8 @@
 	import type { EncryptedKey } from '$lib/crypto/asymmetric';
 	import { loadMembershipForProject } from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
+	import { loadOfflineFileSettings } from '$lib/client/offline-settings';
+	import { cacheFileResponse } from '$lib/client/file-cache';
 	import { openCacheDb, initCacheKey, readCacheEntry, writeCacheEntry } from '$lib/stores/cache';
 	import { SUBMISSION_TYPE_LABELS } from '$lib/submission-types';
 	import {
@@ -60,6 +62,7 @@
 	let submissions = $state<DecryptedSubmission[]>([]);
 	let formFields = $state<FormField[]>([]);
 	let refreshing = $state(false);
+	let isOffline = $state(false);
 	let searchIndex = $state<AnyOrama | null>(null);
 	let projectPrivateKey = $state<CryptoKey | null>(null);
 	let userEncryptionPrivateKey = $state<CryptoKey | null>(null);
@@ -322,7 +325,9 @@
 			// Persist decrypted results to cold storage (best-effort)
 			writeCacheEntry(cacheDb, cacheKey, CACHE_KEY, fresh).catch(() => {});
 		} catch (err) {
-			if (mode !== 'cached') {
+			if (mode === 'cached') {
+				if (!navigator.onLine) isOffline = true;
+			} else {
 				pageError =
 					err instanceof ApiError
 						? err.message
@@ -468,7 +473,16 @@
 
 					// Fetch encrypted bytes and decrypt using the caller's private key:
 					// moderators use the project key; submitters use their own user key
-					const encBytes = await api.files.downloadEncrypted(file.submissionId, file.fileId);
+					const { bytes: encBytes, url: fileUrl, response: fileResponse } =
+						await api.files.downloadEncrypted(file.submissionId, file.fileId);
+					// Cache the encrypted response for offline access if the user has enabled it
+					const offlineSettings = loadOfflineFileSettings(data.projectId);
+					if (
+						offlineSettings.enabled &&
+						offlineSettings.allowedTypes.includes(file.submissionType)
+					) {
+						cacheFileResponse(fileUrl, fileResponse, offlineSettings.maxCacheMb).catch(() => {});
+					}
 					const encKey = JSON.parse(fileKeys.get(file.fileId)!) as EncryptedKey;
 					const decryptionKey = data.role === 'MODERATOR' ? projectPrivateKey! : userEncryptionPrivateKey!;
 					const symKey = await decryptSymmetricKey(encKey, decryptionKey);
@@ -556,7 +570,9 @@
 		</div>
 
 	{:else}
-		{#if refreshing}
+		{#if isOffline}
+			<div role="status" class="alert alert-warning mb-4 max-w-2xl">{m.submissions_offline_cached()}</div>
+		{:else if refreshing}
 			<div class="flex items-center gap-2 mb-4 text-sm text-base-content/50">
 				<span class="loading loading-spinner loading-xs"></span>
 				{m.submissions_refreshing()}

@@ -15,7 +15,8 @@ import { deriveIndexedDbKey, exportPrivateKeyPkcs8, encryptSymmetric, decryptSym
 
 const DB_NAME = 'rt-cache';
 const STORE_NAME = 'entries';
-const DB_VERSION = 1;
+export const PENDING_STORE = 'pending-submissions';
+const DB_VERSION = 2;
 
 export async function openCacheDb(): Promise<IDBDatabase> {
 	return new Promise((resolve, reject) => {
@@ -24,6 +25,9 @@ export async function openCacheDb(): Promise<IDBDatabase> {
 			const db = (e.target as IDBOpenDBRequest).result;
 			if (!db.objectStoreNames.contains(STORE_NAME)) {
 				db.createObjectStore(STORE_NAME, { keyPath: 'key' });
+			}
+			if (!db.objectStoreNames.contains(PENDING_STORE)) {
+				db.createObjectStore(PENDING_STORE, { keyPath: 'id' });
 			}
 		};
 		req.onsuccess = () => resolve(req.result);

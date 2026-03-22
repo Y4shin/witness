@@ -116,14 +116,20 @@ export const api = {
 		list: (submissionId: string): Promise<GetFilesResponse> =>
 			call(`/api/submissions/${submissionId}/files`),
 
-		/** Moderator-only: returns the raw encrypted bytes of a file. */
-		downloadEncrypted: async (submissionId: string, fileId: string): Promise<Uint8Array> => {
-			const res = await fetch(`/api/submissions/${submissionId}/files/${fileId}`);
+		/** Moderator-only: returns the raw encrypted bytes of a file plus the URL and a cloned Response for caching. */
+		downloadEncrypted: async (
+			submissionId: string,
+			fileId: string
+		): Promise<{ bytes: Uint8Array; url: string; response: Response }> => {
+			const url = `/api/submissions/${submissionId}/files/${fileId}`;
+			const res = await fetch(url);
 			if (!res.ok) {
-				const data = await res.json().catch(() => ({})) as { message?: string };
+				const data = (await res.json().catch(() => ({}))) as { message?: string };
 				throw new ApiError(res.status, data.message ?? `HTTP ${res.status}`);
 			}
-			return new Uint8Array(await res.arrayBuffer());
+			const clone = res.clone();
+			const bytes = new Uint8Array(await res.arrayBuffer());
+			return { bytes, url, response: clone };
 		}
 	},
 

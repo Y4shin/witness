@@ -15,13 +15,14 @@
 	} from '$lib/crypto';
 	import { loadMembershipForProject } from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
+	import { enqueue } from '$lib/client/queue';
 	import type { SubmissionType } from '$lib/api-types';
 	import type { PageData } from './$types';
 	import * as m from '$lib/paraglide/messages';
 
 	let { data }: { data: PageData } = $props();
 
-	type PageMode = 'loading' | 'form' | 'uploading' | 'success' | 'error';
+	type PageMode = 'loading' | 'form' | 'uploading' | 'success' | 'queued' | 'error';
 	let mode = $state<PageMode>('loading');
 	let submitError = $state('');
 	let submissionId = $state('');
@@ -69,6 +70,40 @@
 				encryptSymmetricKeyFor(symKey, userEncPublicKey)
 			]);
 
+			// Encrypt files (needed for both online and offline paths)
+			const pendingFiles = [];
+			for (const file of formData.files) {
+				const fileBytes = new Uint8Array(await file.arrayBuffer());
+				const fileSymKey = await generateSymmetricKey();
+				const encryptedDataStr = await encryptSymmetric(fileSymKey, fileBytes);
+				const [encFileKeyForProject, encFileKeyForUser] = await Promise.all([
+					encryptSymmetricKeyFor(fileSymKey, projectPublicKey),
+					encryptSymmetricKeyFor(fileSymKey, userEncPublicKey)
+				]);
+				pendingFiles.push({
+					fieldName: 'evidence',
+					mimeType: file.type || 'application/octet-stream',
+					encryptedData: encryptedDataStr,
+					encryptedKey: JSON.stringify(encFileKeyForProject),
+					encryptedKeyUser: JSON.stringify(encFileKeyForUser)
+				});
+			}
+
+			// Branch: offline → enqueue; online → submit immediately
+			if (!navigator.onLine) {
+				await enqueue({
+					projectId: data.projectId,
+					type: formData.type,
+					archiveCandidateUrl: formData.archiveCandidateUrl ?? null,
+					encryptedPayload,
+					encryptedKeyProject: JSON.stringify(encKeyForProject),
+					encryptedKeyUser: JSON.stringify(encKeyForUser),
+					files: pendingFiles
+				});
+				mode = 'queued';
+				return;
+			}
+
 			// 4. Get a challenge nonce and sign
 			const { nonce } = await api.auth.challenge();
 
@@ -99,30 +134,11 @@
 			submissionId = response.submissionId;
 
 			// 6. Upload files if any
-			if (formData.files.length > 0) {
+			if (pendingFiles.length > 0) {
 				mode = 'uploading';
-				for (let i = 0; i < formData.files.length; i++) {
-					const file = formData.files[i];
-					uploadProgress = m.submit_uploading_file() + ' ' + (i + 1) + ' of ' + formData.files.length + '…';
-
-					// Encrypt the file
-					const fileBytes = new Uint8Array(await file.arrayBuffer());
-					const fileSymKey = await generateSymmetricKey();
-					const encryptedDataStr = await encryptSymmetric(fileSymKey, fileBytes);
-
-					// Encrypt the file key for project and user
-					const [encFileKeyForProject, encFileKeyForUser] = await Promise.all([
-						encryptSymmetricKeyFor(fileSymKey, projectPublicKey),
-						encryptSymmetricKeyFor(fileSymKey, userEncPublicKey)
-					]);
-
-					await api.submissions.uploadFile(submissionId, {
-						fieldName: 'evidence',
-						mimeType: file.type || 'application/octet-stream',
-						encryptedData: encryptedDataStr,
-						encryptedKey: JSON.stringify(encFileKeyForProject),
-						encryptedKeyUser: JSON.stringify(encFileKeyForUser)
-					});
+				for (let i = 0; i < pendingFiles.length; i++) {
+					uploadProgress = m.submit_uploading_file() + ' ' + (i + 1) + ' of ' + pendingFiles.length + '…';
+					await api.submissions.uploadFile(submissionId, pendingFiles[i]);
 				}
 			}
 
@@ -165,6 +181,11 @@
 		<div role="status" class="alert alert-success mx-auto max-w-xl">
 			<span>{m.submit_success()}</span>
 			<span class="text-xs font-mono opacity-60">ID: {submissionId}</span>
+		</div>
+
+	{:else if mode === 'queued'}
+		<div role="status" class="alert alert-warning mx-auto max-w-xl">
+			<span>{m.submit_queued()}</span>
 		</div>
 
 	{:else if mode === 'error'}
