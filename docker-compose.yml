@@ -1,0 +1,46 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # Required: set this to your public-facing URL (used by SvelteKit for
+      # CSRF protection and absolute URL generation).
+      ORIGIN: "https://your-domain.example.com"
+
+      # SQLite database stored on the named volume below.
+      DATABASE_URL: "file:/data/app.db"
+
+      # Session signing secret — generate with:
+      #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+      SESSION_SECRET: "change-me-to-64-hex-chars"
+
+      # Admin console password (at least 16 characters).
+      ADMIN_PASSWORD: "change-me-to-a-strong-password"
+
+      # ── Optional: S3-compatible object storage ─────────────────────────────
+      # Remove these to use the local filesystem backend (uploads volume below).
+      # S3_ENDPOINT: "https://fsn1.your-objectstorage.com"
+      # S3_BUCKET: "my-witness-files"
+      # S3_ACCESS_KEY_ID: ""
+      # S3_SECRET_ACCESS_KEY: ""
+      # S3_REGION: "eu-central"
+
+      # ── Optional: OpenTelemetry ────────────────────────────────────────────
+      # OTEL_ENABLED: "true"
+      # OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
+      # OTEL_SERVICE_NAME: "witness"
+
+      # Log level: trace | debug | info | warn | error
+      LOG_LEVEL: "info"
+    volumes:
+      # SQLite database — persisted across container restarts.
+      - db_data:/data
+      # Encrypted file uploads — only needed with the local storage backend.
+      # Remove this volume if using S3.
+      - uploads:/app/uploads
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  uploads:

@@ -1,0 +1,33 @@
+node_modules
+
+# SvelteKit / vite build outputs (rebuilt inside Docker)
+build
+.svelte-kit
+
+# Generated sources (rebuilt inside Docker)
+src/lib/server/prisma
+src/lib/paraglide
+src/paraglide
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Test databases and test output
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+tests/test.db
+test-results
+playwright-report
+
+# Local file uploads (runtime data, not part of the image)
+uploads
+
+# Development / tooling
+.claude
+.direnv
+.git
+.gitignore

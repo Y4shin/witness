@@ -35,6 +35,9 @@ project.inlang/cache/
 *.db-wal
 *.db-shm
 
+# SOPS plaintext (never commit)
+*.plaintext
+
 # Claude
 .claude/settings.local.json
 uploads/
