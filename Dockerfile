@@ -32,6 +32,9 @@ COPY --from=builder /app/build ./build
 # Prisma schema + migrations (needed by `prisma migrate deploy`)
 COPY --from=builder /app/prisma ./prisma
 
+# Prisma config (Prisma 7 reads DATABASE_URL from here, not schema.prisma)
+COPY prisma.config.ts ./
+
 # OpenTelemetry bootstrap (loaded via --import before the server starts)
 COPY instrumentation.js ./
 
