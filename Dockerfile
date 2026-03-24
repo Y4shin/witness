@@ -40,9 +40,9 @@ COPY instrumentation.js ./
 
 # Create the uploads directory. Mount a named volume here when using the
 # local-filesystem storage backend (default when S3_* vars are not set).
-RUN mkdir -p uploads
+RUN mkdir -p uploads data
 
-RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
+RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app /data
 USER app
 
 EXPOSE 3000
