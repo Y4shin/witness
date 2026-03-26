@@ -256,5 +256,12 @@
 	"settings_offline_files_usage": "{mb} MB used",
 	"settings_offline_files_clear": "Clear cache",
 	"settings_offline_files_cleared": "Cache cleared.",
-	"settings_no_limit": "No limit"
+	"settings_no_limit": "No limit",
+	"submission_details_view": "View details",
+	"submission_details_files": "Files",
+	"submission_details_no_files": "No files attached",
+	"submission_details_no_fields": "No form fields",
+	"submission_details_download": "Download",
+	"submission_details_preview": "Preview",
+	"submission_details_hide_preview": "Hide"
 }

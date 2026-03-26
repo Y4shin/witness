@@ -27,7 +27,8 @@
 
 <svelte:head><title>Witness</title></svelte:head>
 
-<div class="min-h-screen flex flex-col items-center justify-center p-8 gap-10">
+<div class="min-h-screen flex flex-col items-center justify-center p-8 gap-10 relative">
+	<a href="/admin" class="absolute top-4 right-4 btn btn-ghost btn-xs opacity-40 hover:opacity-100">Admin</a>
 	<div class="text-center max-w-lg">
 		<h1 class="text-4xl font-bold tracking-tight mb-4">Witness</h1>
 		<p class="text-base-content/70 text-lg">

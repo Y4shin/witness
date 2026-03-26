@@ -39,9 +39,12 @@
 <div class="p-6 max-w-3xl mx-auto">
 	<div class="flex items-center justify-between mb-6">
 		<h1 class="text-2xl font-bold">{m.dashboard_title()}</h1>
-		<button class="btn btn-ghost btn-xs" onclick={() => (privacyOpen = true)}>
-			{m.privacy_help_btn()}
-		</button>
+		<div class="flex items-center gap-2">
+			<a href="/admin" class="btn btn-ghost btn-xs opacity-40 hover:opacity-100">Admin</a>
+			<button class="btn btn-ghost btn-xs" onclick={() => (privacyOpen = true)}>
+				{m.privacy_help_btn()}
+			</button>
+		</div>
 	</div>
 
 	{#if projects.length === 0}

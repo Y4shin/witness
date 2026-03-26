@@ -888,6 +888,11 @@
 									{/each}
 								</dl>
 							{/if}
+							<div class="mt-3 flex justify-end">
+								<a href="/projects/{data.projectId}/submissions/{sub.id}" class="btn btn-xs btn-ghost border border-base-300">
+									{m.submission_details_view()}
+								</a>
+							</div>
 						</div>
 					</div>
 				{/each}
