@@ -82,6 +82,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			data: {
 				projectId: body.projectId,
 				memberId: body.memberId,
+				// Legacy v1 plaintext fields (optional — omit for schemaVersion=2)
+				type: typeof body.submissionType === 'string' ? body.submissionType : null,
+				archiveCandidateUrl: typeof body.archiveCandidateUrl === 'string' ? body.archiveCandidateUrl : null,
+				archiveUrl: typeof body.archiveUrl === 'string' ? body.archiveUrl : null,
+				schemaVersion: typeof body.schemaVersion === 'number' ? body.schemaVersion : 2,
 				encryptedPayload: body.encryptedPayload ?? 'test-payload',
 				encryptedKeyProject: body.encryptedKeyProject ?? '{}',
 				encryptedKeyUser: body.encryptedKeyUser ?? '{}',
@@ -89,6 +94,25 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		});
 		return json({ submissionId: submission.id });
+	}
+
+	if (body.type === 'submissionFile') {
+		if (typeof body.submissionId !== 'string') throw error(400, 'submissionId is required');
+		const file = await db.submissionFile.create({
+			data: {
+				submissionId: body.submissionId,
+				fieldName: body.fieldName ?? 'evidence',
+				// Legacy v1 plaintext field (optional — omit for schemaVersion=2)
+				mimeType: typeof body.mimeType === 'string' ? body.mimeType : null,
+				schemaVersion: typeof body.schemaVersion === 'number' ? body.schemaVersion : 2,
+				encryptedMeta: typeof body.encryptedMeta === 'string' ? body.encryptedMeta : null,
+				storagePath: body.storagePath ?? '/dev/null',
+				encryptedKey: body.encryptedKey ?? '{}',
+				encryptedKeyUser: body.encryptedKeyUser ?? '{}',
+				sizeBytes: body.sizeBytes ?? 0
+			}
+		});
+		return json({ fileId: file.id });
 	}
 
 	throw error(400, `Unknown type: ${body.type}`);

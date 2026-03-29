@@ -4,13 +4,18 @@
 		decryptSymmetricKey,
 		decryptSymmetric,
 		importEcdhPrivateKey,
-		importUserKeyBundleJwk
+		importEcdhPublicKey,
+		importUserKeyBundleJwk,
+		generateSymmetricKey,
+		encryptSymmetric,
+		encryptSymmetricKeyFor,
+		stringToJwk
 	} from '$lib/crypto';
 	import type { EncryptedKey } from '$lib/crypto/asymmetric';
 	import { loadMembershipForProject } from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
 	import { SUBMISSION_TYPE_LABELS } from '$lib/submission-types';
-	import type { FormField } from '$lib/api-types';
+	import type { FormField, DecryptedPayload, SubmissionType } from '$lib/api-types';
 	import type { PageData } from './$types';
 	import * as m from '$lib/paraglide/messages';
 	import { localizeHref } from '$lib/paraglide/runtime';
@@ -29,7 +34,8 @@
 	type FileEntry = {
 		id: string;
 		fieldName: string;
-		mimeType: string | null;
+		encryptedMeta: string | null; // AES-GCM ciphertext of { mimeType }; null for legacy files
+		mimeType: string | null;      // populated lazily when file is decrypted
 		sizeBytes: number;
 		encryptedKey: string;
 		preview: FileState;
@@ -92,11 +98,9 @@
 			const raw = submissionRes.submissions[0];
 			if (!raw) throw new Error('Submission not found');
 
-			subType = raw.type;
 			subCreatedAt = raw.createdAt;
-			subArchiveUrl = raw.archiveUrl;
 
-			// Decrypt submission payload
+			// Decrypt submission payload — type and archiveUrl live inside the envelope
 			try {
 				let symKey: CryptoKey;
 				if (data.role === 'MODERATOR' && projectPrivateKey) {
@@ -107,21 +111,102 @@
 					symKey = await decryptSymmetricKey(encKeyUser, userBundle.encryption.privateKey);
 				}
 				const plaintext = await decryptSymmetric(symKey, raw.encryptedPayload);
-				const parsed = JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, string>;
-				subFields = Object.entries(parsed).map(([key, value]) => ({ key, value }));
+				const parsed = JSON.parse(new TextDecoder().decode(plaintext)) as DecryptedPayload | Record<string, string>;
+
+				// Support legacy submissions whose payload is a flat Record<string,string>
+				const isEnvelope = (p: unknown): p is DecryptedPayload =>
+					typeof p === 'object' && p !== null && 'fields' in p;
+
+				const fields = isEnvelope(parsed) ? parsed.fields : (parsed as Record<string, string>);
+				if (isEnvelope(parsed)) {
+					subType = parsed.type ?? '';
+					subArchiveUrl = parsed.archiveUrl;
+				} else {
+					// v1: read from plaintext columns
+					subType = raw.type ?? '';
+					subArchiveUrl = raw.archiveUrl;
+				}
+				subFields = Object.entries(fields).map(([key, value]) => ({ key, value }));
+
+				// Background migration: re-encrypt with DecryptedPayload envelope if v1
+				if (raw.schemaVersion === 1) {
+					(async () => {
+						try {
+							const { publicKey: projPubKeyStr } = await api.projects.getPublicKey(data.projectId);
+							const projectPublicKey = await importEcdhPublicKey(stringToJwk(projPubKeyStr));
+							const userEncPublicKey = await importEcdhPublicKey(
+								stringToJwk(JSON.stringify(membership.bundle.encryptionPublicKey))
+							);
+							const newSymKey = await generateSymmetricKey();
+							const envelope: DecryptedPayload = {
+								type: (raw.type ?? 'FILE_UPLOAD') as SubmissionType,
+								archiveCandidateUrl: raw.archiveCandidateUrl,
+								archiveUrl: raw.archiveUrl,
+								fields
+							};
+							const encryptedPayload = await encryptSymmetric(
+								newSymKey,
+								new TextEncoder().encode(JSON.stringify(envelope))
+							);
+							const [encKeyProject, encKeyUser] = await Promise.all([
+								encryptSymmetricKeyFor(newSymKey, projectPublicKey),
+								encryptSymmetricKeyFor(newSymKey, userEncPublicKey)
+							]);
+							await api.submissions.migrate(raw.id, {
+								encryptedPayload,
+								encryptedKeyProject: JSON.stringify(encKeyProject),
+								encryptedKeyUser: JSON.stringify(encKeyUser)
+							});
+						} catch {
+							// Non-fatal — will retry on next load
+						}
+					})();
+				}
 			} catch {
 				subDecryptError = 'Decryption failed — key may be missing or corrupted';
 			}
 
-			// Map file records
-			files = filesRes.files.map((f) => ({
-				id: f.id,
-				fieldName: f.fieldName,
-				mimeType: f.mimeType,
-				sizeBytes: f.sizeBytes,
-				encryptedKey: f.encryptedKey,
-				preview: { kind: 'idle' }
-			}));
+			// Map file records — decrypt encryptedMeta eagerly to populate mimeType
+			// (needed to show Preview buttons before any interaction)
+			const decKey = data.role === 'MODERATOR' ? projectPrivateKey! : userBundle.encryption.privateKey;
+			files = await Promise.all(
+				filesRes.files.map(async (f) => {
+					let mimeType: string | null = null;
+					if (f.encryptedMeta) {
+						// v2: decrypt encryptedMeta to recover mimeType
+						try {
+							const encKey = JSON.parse(f.encryptedKey) as EncryptedKey;
+							const fileSymKey = await decryptSymmetricKey(encKey, decKey);
+							const metaBytes = await decryptSymmetric(fileSymKey, f.encryptedMeta);
+							const meta = JSON.parse(new TextDecoder().decode(metaBytes)) as { mimeType: string };
+							mimeType = meta.mimeType ?? null;
+						} catch {
+							// corrupted — leave null
+						}
+					} else if (f.schemaVersion === 1 && f.mimeType) {
+						// v1: mimeType is in plaintext; use it directly and migrate in background
+						mimeType = f.mimeType;
+						try {
+							const encKey = JSON.parse(f.encryptedKey) as EncryptedKey;
+							const fileSymKey = await decryptSymmetricKey(encKey, decKey);
+							const metaBytes = new TextEncoder().encode(JSON.stringify({ mimeType: f.mimeType }));
+							const encryptedMeta = await encryptSymmetric(fileSymKey, metaBytes);
+							api.files.migrate(data.submissionId, f.id, { encryptedMeta }).catch(() => {});
+						} catch {
+							// Non-fatal — will retry on next load
+						}
+					}
+					return {
+						id: f.id,
+						fieldName: f.fieldName,
+						encryptedMeta: f.encryptedMeta,
+						mimeType,
+						sizeBytes: f.sizeBytes,
+						encryptedKey: f.encryptedKey,
+						preview: { kind: 'idle' as const }
+					};
+				})
+			);
 
 			mode = 'ready';
 		} catch (err) {
@@ -161,6 +246,20 @@
 			const encKey = JSON.parse(file.encryptedKey) as EncryptedKey;
 			const symKey = await decryptSymmetricKey(encKey, decryptionKey);
 
+			// Decrypt mimeType from encryptedMeta if not yet resolved
+			let mime = file.mimeType;
+			if (!mime && file.encryptedMeta) {
+				try {
+					const metaBytes = await decryptSymmetric(symKey, file.encryptedMeta);
+					const meta = JSON.parse(new TextDecoder().decode(metaBytes)) as { mimeType: string };
+					mime = meta.mimeType ?? null;
+					files[idx] = { ...files[idx], mimeType: mime };
+				} catch {
+					// corrupted meta — fall back
+				}
+			}
+			mime ??= 'application/octet-stream';
+
 			const { bytes: encBytes } = await api.files.downloadEncrypted(data.submissionId, fileId);
 			const iv = encBytes.slice(0, 12);
 			const ciphertext = encBytes.slice(12);
@@ -168,11 +267,10 @@
 				await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, symKey, ciphertext)
 			);
 
-			const mime = file.mimeType ?? 'application/octet-stream';
 			const blob = new Blob([decrypted], { type: mime });
 			const blobUrl = URL.createObjectURL(blob);
 			blobUrls.push(blobUrl);
-			files[idx] = { ...file, preview: { kind: 'ready', blobUrl, mimeType: mime } };
+			files[idx] = { ...files[idx], preview: { kind: 'ready', blobUrl, mimeType: mime } };
 		} catch (err) {
 			files[idx] = {
 				...file,
@@ -185,12 +283,13 @@
 	}
 
 	async function downloadFile(fileId: string) {
-		const file = files.find((f) => f.id === fileId);
-		if (!file) return;
+		const fileIdx = files.findIndex((f) => f.id === fileId);
+		if (fileIdx === -1) return;
+		const file = files[fileIdx];
 
 		// If already loaded in preview, reuse the blob
 		if (file.preview.kind === 'ready') {
-			triggerDownload(file.preview.blobUrl, file.fieldName, file.mimeType ?? 'application/octet-stream');
+			triggerDownload(file.preview.blobUrl, file.fieldName, file.preview.mimeType);
 			return;
 		}
 
@@ -199,6 +298,20 @@
 			const encKey = JSON.parse(file.encryptedKey) as EncryptedKey;
 			const symKey = await decryptSymmetricKey(encKey, decryptionKey);
 
+			// Decrypt mimeType from encryptedMeta if not yet resolved
+			let mime = file.mimeType;
+			if (!mime && file.encryptedMeta) {
+				try {
+					const metaBytes = await decryptSymmetric(symKey, file.encryptedMeta);
+					const meta = JSON.parse(new TextDecoder().decode(metaBytes)) as { mimeType: string };
+					mime = meta.mimeType ?? null;
+					files[fileIdx] = { ...files[fileIdx], mimeType: mime };
+				} catch {
+					// corrupted meta — fall back
+				}
+			}
+			mime ??= 'application/octet-stream';
+
 			const { bytes: encBytes } = await api.files.downloadEncrypted(data.submissionId, fileId);
 			const iv = encBytes.slice(0, 12);
 			const ciphertext = encBytes.slice(12);
@@ -206,7 +319,6 @@
 				await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, symKey, ciphertext)
 			);
 
-			const mime = file.mimeType ?? 'application/octet-stream';
 			const blob = new Blob([decrypted], { type: mime });
 			const url = URL.createObjectURL(blob);
 			triggerDownload(url, file.fieldName, mime);
@@ -258,7 +370,7 @@
 
 		<!-- ── Header ─────────────────────────────────────────────────────────── -->
 		<div class="flex items-center gap-3 flex-wrap">
-			<span class="badge badge-primary">{SUBMISSION_TYPE_LABELS[subType as import('$lib/api-types').SubmissionType]}</span>
+			<span class="badge badge-primary">{subType ? SUBMISSION_TYPE_LABELS[subType as import('$lib/api-types').SubmissionType] ?? subType : '(Unknown)'}</span>
 			<span class="text-sm text-base-content/60">{formatDate(subCreatedAt)}</span>
 			<span class="text-xs font-mono text-base-content/40">ID: {data.submissionId}</span>
 		</div>

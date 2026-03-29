@@ -21,13 +21,6 @@ enum FieldType {
   DATE
 }
 
-enum SubmissionType {
-  YOUTUBE_VIDEO
-  WEBPAGE
-  INSTAGRAM_POST
-  INSTAGRAM_STORY
-}
-
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Project {
@@ -93,17 +86,21 @@ model InviteLink {
 }
 
 model Submission {
-  id                   String         @id @default(uuid())
+  id                   String   @id @default(uuid())
   projectId            String
   memberId             String
-  type                 SubmissionType @default(WEBPAGE)
-  archiveCandidateUrl  String?        // Plaintext URL submitted for archiving (not sensitive)
-  archiveUrl           String?        // URL returned by archive.ph after archiving
-  encryptedPayload     String         // AES-GCM ciphertext of form data (JSON)
-  encryptedKeyProject  String         // Symmetric key encrypted with project public key
-  encryptedKeyUser     String         // Symmetric key encrypted with submitter's public key
-  submitterSignature   String         // Signature over (nonce || SHA-256(encryptedPayload))
-  createdAt            DateTime       @default(now())
+  // Legacy plaintext fields (schema v1). Null once the client has migrated to v2.
+  type                 String?
+  archiveCandidateUrl  String?
+  archiveUrl           String?
+  // schemaVersion=1: payload is flat Record<string,string>, metadata in plaintext columns above.
+  // schemaVersion=2: payload is DecryptedPayload envelope, plaintext columns are null.
+  schemaVersion        Int      @default(1)
+  encryptedPayload     String   // AES-GCM ciphertext of DecryptedPayload JSON (v2) or flat fields (v1)
+  encryptedKeyProject  String   // Symmetric key encrypted with project public key
+  encryptedKeyUser     String   // Symmetric key encrypted with submitter's public key
+  submitterSignature   String   // Signature over (nonce || SHA-256(encryptedPayload))
+  createdAt            DateTime @default(now())
 
   project Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   member  Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
@@ -114,7 +111,12 @@ model SubmissionFile {
   id               String   @id @default(uuid())
   submissionId     String
   fieldName        String
-  mimeType         String?  // MIME type of the original file
+  // Legacy plaintext field (schema v1). Null once the client has migrated to v2.
+  mimeType         String?
+  // schemaVersion=1: encryptedMeta is null, mimeType has the value.
+  // schemaVersion=2: encryptedMeta holds AES-GCM ciphertext of { mimeType }, mimeType is null.
+  schemaVersion    Int      @default(1)
+  encryptedMeta    String?  // AES-GCM ciphertext of { mimeType } encrypted with per-file symmetric key
   storagePath      String   // Path to encrypted file on disk
   encryptedKey     String   // Symmetric key encrypted with project public key
   encryptedKeyUser String   // Symmetric key encrypted with submitter's public key

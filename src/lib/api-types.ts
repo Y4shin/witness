@@ -86,7 +86,18 @@ export interface CreateInviteResponse {
 
 // ── Submission types ──────────────────────────────────────────────────────
 
-export type SubmissionType = 'YOUTUBE_VIDEO' | 'WEBPAGE' | 'INSTAGRAM_POST' | 'INSTAGRAM_STORY';
+export type SubmissionType = 'YOUTUBE_VIDEO' | 'WEBPAGE' | 'INSTAGRAM_POST' | 'INSTAGRAM_STORY' | 'FILE_UPLOAD';
+
+/**
+ * The plaintext JSON object that gets AES-GCM encrypted into encryptedPayload.
+ * type, archiveCandidateUrl, and archiveUrl are stored only here — never in plaintext DB columns.
+ */
+export interface DecryptedPayload {
+	type: SubmissionType;
+	archiveCandidateUrl: string | null;
+	archiveUrl: string | null;
+	fields: Record<string, string>;
+}
 
 // ── POST /api/submissions ─────────────────────────────────────────────────
 
@@ -101,9 +112,7 @@ export interface SubmissionKeyBundle {
 
 export interface CreateSubmissionRequest {
 	projectId: string;
-	type: SubmissionType;
-	archiveCandidateUrl?: string | null; // Plaintext URL to archive (not sensitive)
-	encryptedPayload: string;    // base64url AES-GCM ciphertext
+	encryptedPayload: string;    // base64url AES-GCM ciphertext of DecryptedPayload JSON
 	encryptedKeyProject: string; // JSON-serialised SubmissionKeyBundle
 	encryptedKeyUser: string;    // JSON-serialised SubmissionKeyBundle
 	submitterSignature: string;  // base64url ECDSA signature
@@ -118,9 +127,9 @@ export interface CreateSubmissionResponse {
 
 export interface UploadFileRequest {
 	fieldName: string;
-	mimeType: string;
-	encryptedData: string;   // base64url AES-GCM ciphertext of file bytes
-	encryptedKey: string;    // JSON-serialised SubmissionKeyBundle (encrypted for project)
+	encryptedMeta: string;    // AES-GCM ciphertext of { mimeType } JSON, encrypted with per-file key
+	encryptedData: string;    // base64url AES-GCM ciphertext of file bytes
+	encryptedKey: string;     // JSON-serialised SubmissionKeyBundle (encrypted for project)
 	encryptedKeyUser: string; // JSON-serialised SubmissionKeyBundle (encrypted for user)
 }
 
@@ -131,7 +140,11 @@ export interface UploadFileResponse {
 export interface FileRecord {
 	id: string;
 	fieldName: string;
+	/** Legacy plaintext MIME type (schema v1). Null after client migration to v2. */
 	mimeType: string | null;
+	/** AES-GCM ciphertext of { mimeType } (schema v2). Null for legacy files not yet migrated. */
+	encryptedMeta: string | null;
+	schemaVersion: number;
 	sizeBytes: number;
 	createdAt: string;
 }
@@ -250,9 +263,12 @@ export interface SubmissionRecord {
 	id: string;
 	memberId: string;
 	projectId: string;
-	type: SubmissionType;
+	/** Legacy plaintext fields (schema v1). Null after client migration to v2. */
+	type: string | null;
+	archiveCandidateUrl: string | null;
 	archiveUrl: string | null;
-	encryptedPayload: string;
+	schemaVersion: number;
+	encryptedPayload: string;    // AES-GCM ciphertext of DecryptedPayload JSON (v2) or flat fields (v1)
 	encryptedKeyProject: string;
 	encryptedKeyUser: string;
 	submitterSignature: string;
@@ -262,6 +278,38 @@ export interface SubmissionRecord {
 
 export interface GetSubmissionsResponse {
 	submissions: SubmissionRecord[];
+}
+
+// ── POST /api/archive ─────────────────────────────────────────────────────
+
+export interface ArchiveRequest {
+	url: string;
+}
+
+export interface ArchiveResponse {
+	archiveUrl: string | null;
+}
+
+// ── PATCH /api/submissions/[id]/migrate ───────────────────────────────────────
+// Client re-encrypts the payload with type/archiveUrl inside the envelope, then
+// calls this endpoint to store the new ciphertext and clear the plaintext columns.
+
+export interface MigrateSubmissionRequest {
+	encryptedPayload: string;
+	encryptedKeyProject: string;
+	encryptedKeyUser: string;
+}
+
+// ── PATCH /api/submissions/[id]/files/[fileId]/migrate ────────────────────────
+// Client encrypts { mimeType } with the existing per-file symmetric key, then
+// calls this endpoint to store encryptedMeta and clear the plaintext mimeType.
+
+export interface MigrateFileRequest {
+	encryptedMeta: string;
+}
+
+export interface MigrateResponse {
+	ok: boolean;
 }
 
 // ── Error shape (SvelteKit error() helper) ─────────────────────────────────

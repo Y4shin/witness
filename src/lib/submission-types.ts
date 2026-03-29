@@ -47,6 +47,13 @@ export const SUBMISSION_TYPES: SubmissionTypeDef[] = [
 			{ key: 'username', label: 'Username', placeholder: '@username', required: true },
 			{ key: 'notes', label: 'Notes', placeholder: 'Description of the story (stories expire quickly)', required: false }
 		]
+	},
+	{
+		value: 'FILE_UPLOAD',
+		label: 'File Upload',
+		fields: [
+			{ key: 'notes', label: 'Notes', placeholder: 'Optional description of the files being uploaded', required: false }
+		]
 	}
 ];
 
@@ -58,5 +65,6 @@ export const SUBMISSION_TYPE_LABELS: Record<SubmissionType, string> = {
 	WEBPAGE: 'Webpage',
 	YOUTUBE_VIDEO: 'YouTube Video',
 	INSTAGRAM_POST: 'Instagram Post',
-	INSTAGRAM_STORY: 'Instagram Story'
+	INSTAGRAM_STORY: 'Instagram Story',
+	FILE_UPLOAD: 'File Upload'
 };

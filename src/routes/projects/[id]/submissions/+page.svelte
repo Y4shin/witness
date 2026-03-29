@@ -4,7 +4,12 @@
 		decryptSymmetricKey,
 		decryptSymmetric,
 		importEcdhPrivateKey,
-		importUserKeyBundleJwk
+		importEcdhPublicKey,
+		importUserKeyBundleJwk,
+		generateSymmetricKey,
+		encryptSymmetric,
+		encryptSymmetricKeyFor,
+		stringToJwk
 	} from '$lib/crypto';
 	import type { EncryptedKey } from '$lib/crypto/asymmetric';
 	import { loadMembershipForProject } from '$lib/client/key-store';
@@ -13,6 +18,7 @@
 	import { cacheFileResponse } from '$lib/client/file-cache';
 	import { openCacheDb, initCacheKey, readCacheEntry, writeCacheEntry } from '$lib/stores/cache';
 	import { SUBMISSION_TYPE_LABELS } from '$lib/submission-types';
+	import type { DecryptedPayload } from '$lib/api-types';
 	import {
 		buildSubmissionIndex,
 		searchSubmissions
@@ -44,7 +50,7 @@
 		id: string;
 		memberId: string;
 		createdAt: string;
-		type: SubmissionType;
+		type: SubmissionType | undefined; // undefined for legacy submissions pre-envelope
 		archiveUrl: string | null;
 		fileCount: number;
 		contentDate: string | null; // ISO date from a DATE-type form field, or null
@@ -60,12 +66,26 @@
 	let mode = $state<PageMode>('loading');
 	let pageError = $state('');
 	let submissions = $state<DecryptedSubmission[]>([]);
+	let rawSubmissions = $state<import('$lib/api-types').SubmissionRecord[]>([]);
 	let formFields = $state<FormField[]>([]);
 	let refreshing = $state(false);
 	let isOffline = $state(false);
 	let searchIndex = $state<AnyOrama | null>(null);
 	let projectPrivateKey = $state<CryptoKey | null>(null);
 	let userEncryptionPrivateKey = $state<CryptoKey | null>(null);
+
+	// ── Bulk migration state (moderator only) ──────────────────────────────────
+
+	type MigrateAllPhase =
+		| { kind: 'idle' }
+		| { kind: 'running'; done: number; total: number; errors: number }
+		| { kind: 'done'; total: number; errors: number };
+
+	let migrateAllPhase = $state<MigrateAllPhase>({ kind: 'idle' });
+
+	const v1SubmissionCount = $derived(
+		rawSubmissions.filter((s) => s.schemaVersion === 1).length
+	);
 
 	// ── Export state ───────────────────────────────────────────────────────
 
@@ -249,10 +269,21 @@
 			]);
 			const fields = fieldsResult.fields;
 
+			rawSubmissions = raw;
 			formFields = fields;
 
 			// Identify DATE fields for contentDate extraction
 			const dateFieldIds = new Set(fields.filter((f) => f.type === 'DATE').map((f) => f.id));
+
+			// Collect v1 submissions that need background migration.
+			type V1Sub = {
+				id: string;
+				type: string | null;
+				archiveCandidateUrl: string | null;
+				archiveUrl: string | null;
+				fields: Record<string, string>;
+			};
+			const v1Subs: V1Sub[] = [];
 
 			const fresh = await Promise.all(
 				raw.map(async (s) => {
@@ -266,7 +297,27 @@
 							symKey = await decryptSymmetricKey(encKeyUser, userBundle.encryption.privateKey);
 						}
 						const plaintext = await decryptSymmetric(symKey, s.encryptedPayload);
-						const fields = JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, string>;
+						const parsed = JSON.parse(new TextDecoder().decode(plaintext)) as DecryptedPayload | Record<string, string>;
+
+						// Support legacy submissions whose payload is a flat Record<string,string>
+						// (created before the DecryptedPayload envelope was introduced)
+						const isEnvelope = (p: unknown): p is DecryptedPayload =>
+							typeof p === 'object' && p !== null && 'fields' in p;
+
+						const fields = isEnvelope(parsed) ? parsed.fields : (parsed as Record<string, string>);
+						const type = isEnvelope(parsed) ? parsed.type : undefined;
+						const archiveUrl = isEnvelope(parsed) ? parsed.archiveUrl : null;
+
+						// Queue for background migration if still on the legacy schema
+						if (s.schemaVersion === 1) {
+							v1Subs.push({
+								id: s.id,
+								type: s.type,
+								archiveCandidateUrl: s.archiveCandidateUrl,
+								archiveUrl: s.archiveUrl,
+								fields
+							});
+						}
 
 						// Extract contentDate from the first DATE-type form field
 						const contentDate = extractContentDate(fields, dateFieldIds);
@@ -275,8 +326,8 @@
 							id: s.id,
 							memberId: s.memberId,
 							createdAt: s.createdAt,
-							type: s.type,
-							archiveUrl: s.archiveUrl,
+							type,
+							archiveUrl,
 							fileCount: s.fileCount,
 							contentDate,
 							fields
@@ -286,8 +337,8 @@
 							id: s.id,
 							memberId: s.memberId,
 							createdAt: s.createdAt,
-							type: s.type,
-							archiveUrl: s.archiveUrl,
+							type: undefined,
+							archiveUrl: null,
 							fileCount: s.fileCount,
 							contentDate: null,
 							fields: {},
@@ -299,6 +350,48 @@
 
 			submissions = fresh;
 			mode = 'ready';
+
+			// Background migration: re-encrypt v1 submissions with the DecryptedPayload
+			// envelope so that type/archiveUrl are no longer stored in plaintext columns.
+			if (v1Subs.length > 0) {
+				(async () => {
+					try {
+						const { publicKey: projPubKeyStr } = await api.projects.getPublicKey(data.projectId);
+						const projectPublicKey = await importEcdhPublicKey(stringToJwk(projPubKeyStr));
+						const userEncPublicKey = await importEcdhPublicKey(
+							stringToJwk(JSON.stringify(membership.bundle.encryptionPublicKey))
+						);
+						for (const item of v1Subs) {
+							try {
+								const newSymKey = await generateSymmetricKey();
+								const envelope: DecryptedPayload = {
+									type: (item.type ?? 'FILE_UPLOAD') as SubmissionType,
+									archiveCandidateUrl: item.archiveCandidateUrl,
+									archiveUrl: item.archiveUrl,
+									fields: item.fields
+								};
+								const encryptedPayload = await encryptSymmetric(
+									newSymKey,
+									new TextEncoder().encode(JSON.stringify(envelope))
+								);
+								const [encKeyProject, encKeyUser] = await Promise.all([
+									encryptSymmetricKeyFor(newSymKey, projectPublicKey),
+									encryptSymmetricKeyFor(newSymKey, userEncPublicKey)
+								]);
+								await api.submissions.migrate(item.id, {
+									encryptedPayload,
+									encryptedKeyProject: JSON.stringify(encKeyProject),
+									encryptedKeyUser: JSON.stringify(encKeyUser)
+								});
+							} catch {
+								// Non-fatal — will retry on next page load
+							}
+						}
+					} catch {
+						// Project public key fetch failed — will retry on next page load
+					}
+				})();
+			}
 
 			// Build Orama index for filtering
 			const selectFields = fields
@@ -312,7 +405,7 @@
 					id: s.id,
 					userId: s.memberId,
 					createdAt: s.createdAt,
-					type: s.type,
+					type: s.type ?? 'unknown',
 					archiveUrl: s.archiveUrl,
 					fileCount: s.fileCount,
 					contentDate: s.contentDate,
@@ -377,6 +470,112 @@
 
 	const ALL_TYPES: SubmissionType[] = ['WEBPAGE', 'YOUTUBE_VIDEO', 'INSTAGRAM_POST', 'INSTAGRAM_STORY'];
 
+	// ── Bulk migration (moderator only) ───────────────────────────────────────
+
+	async function migrateAll() {
+		if (!projectPrivateKey) return;
+
+		const v1 = rawSubmissions.filter((s) => s.schemaVersion === 1);
+		if (v1.length === 0) return;
+
+		const { publicKey: projPubKeyStr } = await api.projects.getPublicKey(data.projectId);
+		const projectPublicKey = await importEcdhPublicKey(stringToJwk(projPubKeyStr));
+
+		migrateAllPhase = { kind: 'running', done: 0, total: v1.length, errors: 0 };
+		let errors = 0;
+
+		for (let i = 0; i < v1.length; i++) {
+			const s = v1[i];
+			try {
+				// Decrypt the submission payload using the project private key
+				const encKeyProject = JSON.parse(s.encryptedKeyProject) as EncryptedKey;
+				const symKey = await decryptSymmetricKey(encKeyProject, projectPrivateKey);
+				const plaintext = await decryptSymmetric(symKey, s.encryptedPayload);
+				const parsed = JSON.parse(new TextDecoder().decode(plaintext)) as DecryptedPayload | Record<string, string>;
+
+				const isEnvelope = (p: unknown): p is DecryptedPayload =>
+					typeof p === 'object' && p !== null && 'fields' in p;
+
+				const fields = isEnvelope(parsed) ? parsed.fields : (parsed as Record<string, string>);
+
+				// Re-encrypt as DecryptedPayload envelope with a fresh symmetric key
+				const newSymKey = await generateSymmetricKey();
+				const envelope: DecryptedPayload = {
+					type: (s.type ?? 'FILE_UPLOAD') as SubmissionType,
+					archiveCandidateUrl: s.archiveCandidateUrl,
+					archiveUrl: s.archiveUrl,
+					fields
+				};
+				const newEncryptedPayload = await encryptSymmetric(
+					newSymKey,
+					new TextEncoder().encode(JSON.stringify(envelope))
+				);
+				// Wrap the new key for both project and the submitter's own user key
+				// The server will store the new encryptedKeyUser without re-wrapping for the
+				// submitter — but the project key is what moderators use, and that is fresh.
+				// Note: we wrap for the project public key (same recipient, new ephemeral).
+				// We re-use the existing encryptedKeyUser as a passthrough — the server will
+				// store whatever we send; the submitter's key is still valid for the old
+				// ciphertext.  Instead, we generate a new user-key bundle wrapping the new
+				// sym key so both keys decrypt the new ciphertext correctly.
+				// Since we don't have the submitter's public key here, we pull it from the
+				// members list.
+				const { members } = await api.members.list(data.projectId);
+				const submitterMember = members.find((m) => m.memberId === s.memberId);
+
+				let encKeyUser: string;
+				if (submitterMember) {
+					const submitterPubKey = await importEcdhPublicKey(
+						stringToJwk(submitterMember.encryptionPublicKey)
+					);
+					const wrappedForUser = await encryptSymmetricKeyFor(newSymKey, submitterPubKey);
+					encKeyUser = JSON.stringify(wrappedForUser);
+				} else {
+					// Submitter no longer a member — wrap for project key as fallback
+					const wrappedForProject = await encryptSymmetricKeyFor(newSymKey, projectPublicKey);
+					encKeyUser = JSON.stringify(wrappedForProject);
+				}
+
+				const encKeyForProject = await encryptSymmetricKeyFor(newSymKey, projectPublicKey);
+
+				await api.submissions.migrate(s.id, {
+					encryptedPayload: newEncryptedPayload,
+					encryptedKeyProject: JSON.stringify(encKeyForProject),
+					encryptedKeyUser: encKeyUser
+				});
+
+				// Migrate v1 files for this submission
+				const { files } = await api.files.list(s.id);
+				const v1Files = files.filter((f) => f.schemaVersion === 1 && f.mimeType);
+				for (const f of v1Files) {
+					try {
+						const fileEncKey = JSON.parse(f.encryptedKey) as EncryptedKey;
+						const fileSymKey = await decryptSymmetricKey(fileEncKey, projectPrivateKey);
+						const encryptedMeta = await encryptSymmetric(
+							fileSymKey,
+							new TextEncoder().encode(JSON.stringify({ mimeType: f.mimeType }))
+						);
+						await api.files.migrate(s.id, f.id, { encryptedMeta });
+					} catch {
+						// Non-fatal per-file error
+					}
+				}
+			} catch {
+				errors++;
+			}
+
+			migrateAllPhase = { kind: 'running', done: i + 1, total: v1.length, errors };
+		}
+
+		// Refresh raw list so the button disappears / count updates
+		try {
+			const { submissions: refreshed } = await api.submissions.list(data.projectId);
+			rawSubmissions = refreshed;
+		} catch { /* non-fatal */ }
+
+		migrateAllPhase = { kind: 'done', total: v1.length, errors };
+	}
+
 	// ── Export helpers ─────────────────────────────────────────────────────
 
 	function triggerDownload(bytes: Uint8Array, filename: string, mimeType: string) {
@@ -424,14 +623,30 @@
 					filesBySubmission.set(id, files.map((f) => f.id));
 					for (const f of files) {
 						fileKeys.set(f.id, f.encryptedKey);
+
+						// Decrypt encryptedMeta to recover mimeType (needed for filenames in Phase 2)
+						let mimeType: string | null = null;
+						if (f.encryptedMeta) {
+							try {
+								const decKey = data.role === 'MODERATOR' ? projectPrivateKey! : userEncryptionPrivateKey!;
+								const encKey = JSON.parse(f.encryptedKey) as EncryptedKey;
+								const fileSymKey = await decryptSymmetricKey(encKey, decKey);
+								const metaBytes = await decryptSymmetric(fileSymKey, f.encryptedMeta);
+								const meta = JSON.parse(new TextDecoder().decode(metaBytes)) as { mimeType: string };
+								mimeType = meta.mimeType ?? null;
+							} catch {
+								// Legacy file or corrupted meta — no extension in filename
+							}
+						}
+
 						allFiles.push({
 							submissionId: id,
 							fileId: f.id,
 							fieldName: f.fieldName,
-							mimeType: f.mimeType,
+							mimeType,
 							sizeBytes: f.sizeBytes,
 							submissionIndex: idx,
-							submissionType: sub.type
+							submissionType: sub.type ?? 'unknown'
 						});
 					}
 				}
@@ -517,7 +732,7 @@
 			const csvStr = generateCsv(
 				exportSubs.map((s) => ({
 					id: s.id,
-					type: s.type,
+					type: s.type ?? 'unknown',
 					createdAt: s.createdAt,
 					contentDate: s.contentDate,
 					archiveUrl: s.archiveUrl,
@@ -630,7 +845,49 @@
 				>
 					{m.submissions_export_btn()}
 				</button>
+
+				{#if data.role === 'MODERATOR' && v1SubmissionCount > 0}
+					<button
+						class="btn btn-sm btn-warning"
+						onclick={migrateAll}
+						disabled={migrateAllPhase.kind === 'running'}
+						aria-label="Migrate all legacy submissions"
+					>
+						Encrypt {v1SubmissionCount} legacy {v1SubmissionCount === 1 ? 'submission' : 'submissions'}
+					</button>
+				{/if}
 			</div>
+
+			<!-- ── Bulk migration progress panel ─────────────────────────────── -->
+			{#if migrateAllPhase.kind === 'running' || migrateAllPhase.kind === 'done'}
+				<div class="card bg-base-100 shadow mb-4 max-w-2xl">
+					<div class="card-body py-4 gap-3">
+						{#if migrateAllPhase.kind === 'running'}
+							<p class="text-sm font-medium">
+								Encrypting legacy submissions… ({migrateAllPhase.done} / {migrateAllPhase.total})
+							</p>
+							<progress
+								class="progress progress-warning w-full"
+								value={migrateAllPhase.done}
+								max={migrateAllPhase.total}
+							></progress>
+						{:else}
+							<p class="text-sm font-medium">
+								Done — {migrateAllPhase.total - migrateAllPhase.errors} migrated
+								{#if migrateAllPhase.errors > 0}
+									<span class="text-error">· {migrateAllPhase.errors} failed</span>
+								{/if}
+							</p>
+							<button
+								class="btn btn-xs btn-ghost self-end"
+								onclick={() => (migrateAllPhase = { kind: 'idle' })}
+							>
+								Dismiss
+							</button>
+						{/if}
+					</div>
+				</div>
+			{/if}
 
 			<!-- ── Export progress panel ──────────────────────────────────────── -->
 			{#if exportPhase.kind !== 'idle'}
@@ -849,7 +1106,7 @@
 						<div class="card-body">
 							<div class="flex items-start justify-between mb-2 gap-2 flex-wrap">
 								<div class="flex items-center gap-2 flex-wrap">
-									<span class="badge badge-primary badge-sm">{SUBMISSION_TYPE_LABELS[sub.type]}</span>
+									<span class="badge badge-primary badge-sm">{sub.type ? SUBMISSION_TYPE_LABELS[sub.type] : '(Unknown)'}</span>
 									{#if sub.fileCount > 0}
 										<span class="badge badge-ghost badge-sm">{sub.fileCount} {sub.fileCount !== 1 ? m.submissions_files_badge_plural() : m.submissions_file_badge_singular()}</span>
 									{/if}

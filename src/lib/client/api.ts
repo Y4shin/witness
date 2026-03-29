@@ -29,7 +29,12 @@ import type {
 	CreateFieldRequest,
 	CreateFieldResponse,
 	PatchFieldRequest,
-	PatchFieldResponse
+	PatchFieldResponse,
+	ArchiveRequest,
+	ArchiveResponse,
+	MigrateSubmissionRequest,
+	MigrateFileRequest,
+	MigrateResponse
 } from '$lib/api-types';
 
 export class ApiError extends Error {
@@ -100,6 +105,11 @@ export const api = {
 			call(`/api/invites/${token}`, { method: 'DELETE' })
 	},
 
+	archive: {
+		proxy: (body: ArchiveRequest): Promise<ArchiveResponse> =>
+			post('/api/archive', body)
+	},
+
 	submissions: {
 		create: (body: CreateSubmissionRequest): Promise<CreateSubmissionResponse> =>
 			post('/api/submissions', body),
@@ -108,13 +118,27 @@ export const api = {
 			call(`/api/projects/${projectId}/submissions`),
 
 		uploadFile: (submissionId: string, body: UploadFileRequest): Promise<UploadFileResponse> =>
-			post(`/api/submissions/${submissionId}/files`, body)
+			post(`/api/submissions/${submissionId}/files`, body),
+
+		migrate: (submissionId: string, body: MigrateSubmissionRequest): Promise<MigrateResponse> =>
+			call(`/api/submissions/${submissionId}/migrate`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			})
 	},
 
 	files: {
 		/** Moderator-only: returns file records with encrypted keys for a submission. */
 		list: (submissionId: string): Promise<GetFilesResponse> =>
 			call(`/api/submissions/${submissionId}/files`),
+
+		migrate: (submissionId: string, fileId: string, body: MigrateFileRequest): Promise<MigrateResponse> =>
+			call(`/api/submissions/${submissionId}/files/${fileId}/migrate`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			}),
 
 		/** Moderator-only: returns the raw encrypted bytes of a file plus the URL and a cloned Response for caching. */
 		downloadEncrypted: async (

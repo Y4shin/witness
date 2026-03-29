@@ -16,7 +16,7 @@
 	import { loadMembershipForProject } from '$lib/client/key-store';
 	import { api, ApiError } from '$lib/client/api';
 	import { enqueue } from '$lib/client/queue';
-	import type { SubmissionType } from '$lib/api-types';
+	import type { SubmissionType, DecryptedPayload } from '$lib/api-types';
 	import type { PageData } from './$types';
 	import * as m from '$lib/paraglide/messages';
 
@@ -57,11 +57,31 @@
 			// 1. Generate a random symmetric key
 			const symKey = await generateSymmetricKey();
 
-			// 2. Encrypt the form payload
-			const plaintext = new TextEncoder().encode(JSON.stringify(formData.fields));
+			// 2. Build the DecryptedPayload envelope.
+			//    Archive URL is obtained via the server proxy (online only; null when offline).
+			const archiveCandidateUrl = formData.archiveCandidateUrl ?? null;
+			let archiveUrl: string | null = null;
+			if (navigator.onLine && archiveCandidateUrl) {
+				try {
+					const result = await api.archive.proxy({ url: archiveCandidateUrl });
+					archiveUrl = result.archiveUrl;
+				} catch {
+					// Archive failure is non-fatal — submission proceeds without archive URL
+				}
+			}
+
+			const payload: DecryptedPayload = {
+				type: formData.type,
+				archiveCandidateUrl,
+				archiveUrl,
+				fields: formData.fields
+			};
+
+			// 3. Encrypt the payload
+			const plaintext = new TextEncoder().encode(JSON.stringify(payload));
 			const encryptedPayload = await encryptSymmetric(symKey, plaintext);
 
-			// 3. Encrypt the symmetric key for the project and for ourselves
+			// 4. Encrypt the symmetric key for the project and for ourselves
 			const projectPublicKey = await importEcdhPublicKey(stringToJwk(data.projectPublicKey));
 			const userEncPublicKey = await importEcdhPublicKey(stringToJwk(userEncryptionPublicKeyJwk));
 
@@ -70,19 +90,23 @@
 				encryptSymmetricKeyFor(symKey, userEncPublicKey)
 			]);
 
-			// Encrypt files (needed for both online and offline paths)
+			// 5. Encrypt files (needed for both online and offline paths)
 			const pendingFiles = [];
 			for (const file of formData.files) {
 				const fileBytes = new Uint8Array(await file.arrayBuffer());
 				const fileSymKey = await generateSymmetricKey();
 				const encryptedDataStr = await encryptSymmetric(fileSymKey, fileBytes);
+				const metaBytes = new TextEncoder().encode(
+					JSON.stringify({ mimeType: file.type || 'application/octet-stream' })
+				);
+				const encryptedMetaStr = await encryptSymmetric(fileSymKey, metaBytes);
 				const [encFileKeyForProject, encFileKeyForUser] = await Promise.all([
 					encryptSymmetricKeyFor(fileSymKey, projectPublicKey),
 					encryptSymmetricKeyFor(fileSymKey, userEncPublicKey)
 				]);
 				pendingFiles.push({
 					fieldName: 'evidence',
-					mimeType: file.type || 'application/octet-stream',
+					encryptedMeta: encryptedMetaStr,
 					encryptedData: encryptedDataStr,
 					encryptedKey: JSON.stringify(encFileKeyForProject),
 					encryptedKeyUser: JSON.stringify(encFileKeyForUser)
@@ -93,8 +117,6 @@
 			if (!navigator.onLine) {
 				await enqueue({
 					projectId: data.projectId,
-					type: formData.type,
-					archiveCandidateUrl: formData.archiveCandidateUrl ?? null,
 					encryptedPayload,
 					encryptedKeyProject: JSON.stringify(encKeyForProject),
 					encryptedKeyUser: JSON.stringify(encKeyForUser),
@@ -104,7 +126,7 @@
 				return;
 			}
 
-			// 4. Get a challenge nonce and sign
+			// 6. Get a challenge nonce and sign
 			const { nonce } = await api.auth.challenge();
 
 			const nonceBytes = new TextEncoder().encode(nonce);
@@ -119,11 +141,9 @@
 			void jwkToString(await exportPublicKeyJwk(userBundle!.signing.publicKey));
 			const submitterSignature = await sign(userBundle!.signing.privateKey, message);
 
-			// 5. Submit
+			// 7. Submit
 			const response = await api.submissions.create({
 				projectId: data.projectId,
-				type: formData.type,
-				archiveCandidateUrl: formData.archiveCandidateUrl,
 				encryptedPayload,
 				encryptedKeyProject: JSON.stringify(encKeyForProject),
 				encryptedKeyUser: JSON.stringify(encKeyForUser),

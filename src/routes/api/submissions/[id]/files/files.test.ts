@@ -70,13 +70,13 @@ async function seedSubmission(db: PrismaClient, projectId: string, memberId: str
 async function seedFile(
 	db: PrismaClient,
 	submissionId: string,
-	overrides: { fieldName?: string; mimeType?: string; encryptedKey?: string; encryptedKeyUser?: string } = {}
+	overrides: { fieldName?: string; encryptedMeta?: string | null; encryptedKey?: string; encryptedKeyUser?: string } = {}
 ) {
 	return db.submissionFile.create({
 		data: {
 			submissionId,
 			fieldName: overrides.fieldName ?? 'evidence',
-			mimeType: overrides.mimeType ?? 'image/jpeg',
+			encryptedMeta: overrides.encryptedMeta ?? null,
 			storagePath: '/tmp/fake.enc',
 			encryptedKey: overrides.encryptedKey ?? '{"key":"value"}',
 			encryptedKeyUser: overrides.encryptedKeyUser ?? '{"user":"key"}',
@@ -164,7 +164,7 @@ describe('GET /api/submissions/[id]/files', () => {
 		const submission = await seedSubmission(testDb.db, project.id, member.id);
 		await seedFile(testDb.db, submission.id, {
 			fieldName: 'screenshot',
-			mimeType: 'image/png',
+			encryptedMeta: 'encrypted-meta-value',
 			encryptedKey: '{"k":"test-key"}'
 		});
 
@@ -180,7 +180,7 @@ describe('GET /api/submissions/[id]/files', () => {
 		const file = body.files[0];
 		expect(file.id).toBeTruthy();
 		expect(file.fieldName).toBe('screenshot');
-		expect(file.mimeType).toBe('image/png');
+		expect(file.encryptedMeta).toBe('encrypted-meta-value');
 		expect(file.sizeBytes).toBe(1024);
 		expect(file.createdAt).toBeTruthy();
 		expect(file.encryptedKey).toBe('{"k":"test-key"}');

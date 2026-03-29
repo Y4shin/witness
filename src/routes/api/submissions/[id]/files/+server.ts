@@ -33,6 +33,8 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 			id: f.id,
 			fieldName: f.fieldName,
 			mimeType: f.mimeType,
+			encryptedMeta: f.encryptedMeta,
+			schemaVersion: f.schemaVersion,
 			sizeBytes: f.sizeBytes,
 			createdAt: f.createdAt.toISOString(),
 			// Moderators decrypt with the project key; submitters with their own user key
@@ -71,11 +73,12 @@ export const POST: RequestHandler = async ({ request, locals, params }) => {
 	const b = body as Record<string, unknown>;
 
 	if (typeof b.fieldName !== 'string' || !b.fieldName) throw error(400, 'fieldName is required');
+	if (typeof b.encryptedMeta !== 'string' || !b.encryptedMeta) throw error(400, 'encryptedMeta is required');
 	if (typeof b.encryptedData !== 'string' || !b.encryptedData) throw error(400, 'encryptedData is required');
 	if (typeof b.encryptedKey !== 'string' || !b.encryptedKey) throw error(400, 'encryptedKey is required');
 	if (typeof b.encryptedKeyUser !== 'string' || !b.encryptedKeyUser) throw error(400, 'encryptedKeyUser is required');
 
-	const { fieldName, mimeType, encryptedData, encryptedKey, encryptedKeyUser } = b as unknown as UploadFileRequest;
+	const { fieldName, encryptedMeta, encryptedData, encryptedKey, encryptedKeyUser } = b as unknown as UploadFileRequest;
 
 	// Decode base64url to bytes
 	const base64 = encryptedData.replace(/-/g, '+').replace(/_/g, '/');
@@ -93,7 +96,8 @@ export const POST: RequestHandler = async ({ request, locals, params }) => {
 		data: {
 			submissionId: submissionId!,
 			fieldName,
-			mimeType: mimeType ?? null,
+			schemaVersion: 2,
+			encryptedMeta,
 			storagePath: storageKey,
 			encryptedKey,
 			encryptedKeyUser,
@@ -102,7 +106,7 @@ export const POST: RequestHandler = async ({ request, locals, params }) => {
 	});
 
 	logger.info(
-		{ fileId: file.id, submissionId, fieldName, sizeBytes: file.sizeBytes },
+		{ fileId: file.id, submissionId, fieldName, sizeBytes: file.sizeBytes, hasEncryptedMeta: !!encryptedMeta },
 		'File uploaded'
 	);
 

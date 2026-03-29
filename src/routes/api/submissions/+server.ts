@@ -3,10 +3,7 @@ import type { RequestHandler } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { logger } from '$lib/server/logger';
 import { importEcdsaPublicKey, stringToJwk, verify } from '$lib/crypto';
-import { tryArchive } from '$lib/server/archive';
-import type { CreateSubmissionRequest, CreateSubmissionResponse, SubmissionType } from '$lib/api-types';
-
-const VALID_TYPES: SubmissionType[] = ['YOUTUBE_VIDEO', 'WEBPAGE', 'INSTAGRAM_POST', 'INSTAGRAM_STORY'];
+import type { CreateSubmissionRequest, CreateSubmissionResponse } from '$lib/api-types';
 
 /**
  * POST /api/submissions
@@ -14,6 +11,9 @@ const VALID_TYPES: SubmissionType[] = ['YOUTUBE_VIDEO', 'WEBPAGE', 'INSTAGRAM_PO
  * Accepts an encrypted submission from an authenticated member.
  * Verifies the ECDSA signature over (nonce_bytes || SHA-256(encryptedPayload_bytes))
  * using the challenge-response mechanism, then stores the ciphertext.
+ *
+ * Submission type, archive URLs, and other metadata are stored only inside the
+ * encrypted payload — the server never sees or stores them in plaintext.
  */
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.member) throw error(401, 'Authentication required');
@@ -39,12 +39,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		throw error(400, 'submitterSignature is required');
 	if (typeof b.nonce !== 'string' || !b.nonce)
 		throw error(400, 'nonce is required');
-	if (typeof b.type !== 'string' || !VALID_TYPES.includes(b.type as SubmissionType))
-		throw error(400, `type must be one of: ${VALID_TYPES.join(', ')}`);
-	if (b.archiveCandidateUrl !== undefined && b.archiveCandidateUrl !== null && typeof b.archiveCandidateUrl !== 'string')
-		throw error(400, 'archiveCandidateUrl must be a string or null');
 
-	const { projectId, type, archiveCandidateUrl, encryptedPayload, encryptedKeyProject, encryptedKeyUser, submitterSignature, nonce } =
+	const { projectId, encryptedPayload, encryptedKeyProject, encryptedKeyUser, submitterSignature, nonce } =
 		b as unknown as CreateSubmissionRequest;
 
 	// Verify the member belongs to this project
@@ -81,13 +77,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		throw error(400, 'Invalid signature');
 	}
 
-	// Store the submission
+	// Store the submission — schemaVersion=2 means type/archiveUrl live inside
+	// encryptedPayload (DecryptedPayload envelope); plaintext columns are left null.
 	const submission = await db.submission.create({
 		data: {
 			projectId,
 			memberId: locals.member.id,
-			type,
-			archiveCandidateUrl: archiveCandidateUrl ?? null,
+			schemaVersion: 2,
 			encryptedPayload,
 			encryptedKeyProject,
 			encryptedKeyUser,
@@ -96,21 +92,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	});
 
 	logger.info(
-		{ submissionId: submission.id, projectId, memberId: locals.member.id, type },
+		{ submissionId: submission.id, projectId, memberId: locals.member.id },
 		'Submission received'
 	);
-
-	// Fire archive attempt asynchronously (best-effort, does not block response)
-	if (archiveCandidateUrl) {
-		tryArchive(archiveCandidateUrl).then((archiveUrl) => {
-			if (archiveUrl) {
-				return db.submission.update({
-					where: { id: submission.id },
-					data: { archiveUrl }
-				});
-			}
-		}).catch(() => {});
-	}
 
 	return json({ submissionId: submission.id } satisfies CreateSubmissionResponse, { status: 201 });
 };

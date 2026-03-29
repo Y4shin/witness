@@ -4,13 +4,16 @@
  * Submissions made while offline are stored here (fully encrypted, but
  * without a nonce/signature). At sync time the caller fetches a fresh
  * nonce, signs, and posts each item to the server.
+ *
+ * type, archiveCandidateUrl, and archiveUrl live inside encryptedPayload
+ * (as DecryptedPayload) — they are never stored in plaintext here.
  */
-import type { SubmissionType } from '$lib/api-types';
 import { openCacheDb, PENDING_STORE } from '$lib/stores/cache';
 
 export interface PendingFile {
 	fieldName: string;
-	mimeType: string;
+	/** AES-GCM ciphertext of { mimeType } JSON, encrypted with per-file key */
+	encryptedMeta: string;
 	/** base64url AES-GCM encrypted bytes — identical to UploadFileRequest.encryptedData */
 	encryptedData: string;
 	/** JSON-serialised EncryptedKey for the project */
@@ -22,9 +25,7 @@ export interface PendingFile {
 export interface PendingSubmission {
 	id: string;
 	projectId: string;
-	type: SubmissionType;
-	archiveCandidateUrl: string | null;
-	/** base64url AES-GCM ciphertext — used as-is in CreateSubmissionRequest */
+	/** base64url AES-GCM ciphertext of DecryptedPayload JSON */
 	encryptedPayload: string;
 	encryptedKeyProject: string;
 	encryptedKeyUser: string;

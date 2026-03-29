@@ -205,6 +205,8 @@ async function uploadFile(
 	const symKey = await crypto.subtle.generateKey(
 		{ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
 	);
+
+	// Encrypt file bytes
 	const iv = crypto.getRandomValues(new Uint8Array(12));
 	const ciphertext = new Uint8Array(
 		await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, symKey, content.buffer as ArrayBuffer)
@@ -213,13 +215,23 @@ async function uploadFile(
 	encBytes.set(iv); encBytes.set(ciphertext, iv.length);
 	const encryptedData = b64url(encBytes);
 
+	// Encrypt { mimeType } metadata with the same sym key (schemaVersion=2 format)
+	const metaPlain = new TextEncoder().encode(JSON.stringify({ mimeType }));
+	const metaIv = crypto.getRandomValues(new Uint8Array(12));
+	const metaCiphertext = new Uint8Array(
+		await crypto.subtle.encrypt({ name: 'AES-GCM', iv: metaIv }, symKey, metaPlain)
+	);
+	const metaBytes = new Uint8Array(metaIv.length + metaCiphertext.length);
+	metaBytes.set(metaIv); metaBytes.set(metaCiphertext, metaIv.length);
+	const encryptedMeta = b64url(metaBytes);
+
 	const [encryptedKey, encryptedKeyUser] = await Promise.all([
 		wrapKeyFor(symKey, projectPublicKeyJwk),
 		wrapKeyFor(symKey, userEncryptionPublicKeyJwk)
 	]);
 
 	const res = await request.post(`/api/submissions/${submissionId}/files`, {
-		data: { fieldName, mimeType, encryptedData, encryptedKey, encryptedKeyUser }
+		data: { fieldName, encryptedMeta, encryptedData, encryptedKey, encryptedKeyUser }
 	});
 	expect(res.status()).toBe(201);
 	return (await res.json()).fileId as string;

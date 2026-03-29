@@ -38,8 +38,6 @@ export async function syncPendingSubmissions(
 			// 3. POST submission
 			const { submissionId } = await api.submissions.create({
 				projectId: item.projectId,
-				type: item.type,
-				archiveCandidateUrl: item.archiveCandidateUrl ?? null,
 				encryptedPayload: item.encryptedPayload,
 				encryptedKeyProject: item.encryptedKeyProject,
 				encryptedKeyUser: item.encryptedKeyUser,
@@ -51,7 +49,7 @@ export async function syncPendingSubmissions(
 			for (const f of item.files) {
 				await api.submissions.uploadFile(submissionId, {
 					fieldName: f.fieldName,
-					mimeType: f.mimeType,
+					encryptedMeta: f.encryptedMeta,
 					encryptedData: f.encryptedData,
 					encryptedKey: f.encryptedKey,
 					encryptedKeyUser: f.encryptedKeyUser

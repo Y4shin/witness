@@ -93,7 +93,7 @@ async function seedFile(
 		data: {
 			submissionId,
 			fieldName: 'evidence',
-			mimeType: 'image/jpeg',
+			encryptedMeta: null,
 			storagePath: storageKey,
 			encryptedKey: '{"k":"v"}',
 			encryptedKeyUser: '{"u":"v"}',
@@ -109,7 +109,7 @@ async function seedFileWithMissingData(db: PrismaClient, submissionId: string) {
 		data: {
 			submissionId,
 			fieldName: 'evidence',
-			mimeType: 'image/jpeg',
+			encryptedMeta: null,
 			storagePath: `missing/${randomUUID()}.enc`,
 			encryptedKey: '{"k":"v"}',
 			encryptedKeyUser: '{"u":"v"}',
