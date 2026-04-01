@@ -1,22 +1,21 @@
 /**
- * Playwright global setup — creates a fresh test.db with all migrations applied.
+ * Playwright global setup - creates fresh test databases with all migrations applied.
  * Runs once before all Playwright tests.
  */
 import { existsSync, readFileSync, readdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { createClient } from '@libsql/client';
 
-const DB_PATH = join(process.cwd(), 'tests', 'test.db');
+const DB_FILES = ['test.db', 'test-oidc.db'];
 const MIGRATIONS_DIR = join(process.cwd(), 'prisma', 'migrations');
 
-export default async function globalSetup() {
-	// Start with a clean slate on every run
+async function resetDatabase(dbPath: string) {
 	for (const suffix of ['', '-wal', '-shm']) {
-		const p = DB_PATH + suffix;
-		if (existsSync(p)) rmSync(p);
+		const path = dbPath + suffix;
+		if (existsSync(path)) rmSync(path);
 	}
 
-	const client = createClient({ url: `file:${DB_PATH}` });
+	const client = createClient({ url: `file:${dbPath}` });
 	try {
 		const dirs = readdirSync(MIGRATIONS_DIR).sort();
 		for (const dir of dirs) {
@@ -25,16 +24,23 @@ export default async function globalSetup() {
 			const sql = readFileSync(sqlPath, 'utf-8');
 			const stripped = sql
 				.split('\n')
-				.filter((l) => !l.trim().startsWith('--'))
+				.filter((line) => !line.trim().startsWith('--'))
 				.join('\n');
-			for (const stmt of stripped
+
+			for (const statement of stripped
 				.split(';')
-				.map((s) => s.trim())
-				.filter((s) => s.length > 0)) {
-				await client.execute(stmt);
+				.map((part) => part.trim())
+				.filter((part) => part.length > 0)) {
+				await client.execute(statement);
 			}
 		}
 	} finally {
 		client.close();
+	}
+}
+
+export default async function globalSetup() {
+	for (const filename of DB_FILES) {
+		await resetDatabase(join(process.cwd(), 'tests', filename));
 	}
 }

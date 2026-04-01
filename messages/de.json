@@ -235,6 +235,8 @@
 	"admin_login_title": "Admin-Anmeldung",
 	"admin_password_label": "Passwort",
 	"admin_sign_in_btn": "Anmelden",
+	"admin_oidc_login_hint": "Diese Admin-Konsole verwendet OpenID-Connect-Anmeldung.",
+	"admin_oidc_sign_in_btn": "Mit OpenID Connect fortfahren",
 	"demo_paraglide_link": "paraglide",
 	"demo_playwright_link": "playwright",
 	"demo_vscode_tip": "Wenn Sie VSCode verwenden, installieren Sie die Sherlock-i18n-Erweiterung für ein besseres i18n-Erlebnis.",

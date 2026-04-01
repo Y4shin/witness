@@ -4,66 +4,59 @@
 
 The reporting tool is a SvelteKit application built with `@sveltejs/adapter-node`. It produces a standalone Node.js server bundle in `build/` that can be run on any Linux/macOS host with Node 20+.
 
----
-
 ## Requirements
 
 | Requirement | Minimum version |
-|---|---|
-| Node.js | 20 LTS |
-| npm | 10+ |
-| Disk | 500 MB (app + database) |
-
----
+| ----------- | --------------- |
+| Node.js     | 20 LTS          |
+| npm         | 10+             |
+| Disk        | 500 MB          |
 
 ## Build
 
 ```bash
-# Install production + dev dependencies (needed for the build step)
 npm install
-
-# Generate Prisma client and Paraglide messages
 npx prisma generate
 npx @inlang/paraglide-js compile --project ./project.inlang
-
-# Build the SvelteKit bundle
 npm run build
 ```
 
 The output is written to `build/`.
 
----
-
 ## Environment variables
 
 Copy `.env.example` to `.env` and fill in the values before starting the server.
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `DATABASE_URL` | Yes | — | SQLite file path (`file:./reporting-tool.db`) or libsql/Turso URL |
-| `ADMIN_PASSWORD` | Yes | — | Password for the `/admin` route |
-| `SESSION_SECRET` | Yes | — | At least 32 random bytes (hex) used to sign session tokens |
-| `OTEL_ENABLED` | No | `false` | Set `true` to activate OpenTelemetry |
-| `OTEL_SERVICE_NAME` | No | `reporting-tool` | Service name in traces and logs |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | — | OTLP/HTTP collector URL (required when `OTEL_ENABLED=true`) |
-| `LOG_LEVEL` | No | `info` | Pino log level: `trace` \| `debug` \| `info` \| `warn` \| `error` |
-| `LOG_PRETTY` | No | `false` | Pretty-print logs (development only) |
+| Variable                      | Required                       | Description                                                                   |
+| ----------------------------- | ------------------------------ | ----------------------------------------------------------------------------- |
+| `ORIGIN`                      | Yes                            | Public origin for CSRF protection, absolute redirects, and OIDC callback URLs |
+| `DATABASE_URL`                | Yes                            | SQLite file path (`file:./reporting-tool.db`) or libsql/Turso URL             |
+| `SESSION_SECRET`              | Yes                            | At least 32 random bytes (hex) used to sign session tokens                    |
+| `ADMIN_AUTH_MODE`             | Yes                            | `password` or `oidc`                                                          |
+| `ADMIN_PASSWORD`              | Password mode only             | Password for `/admin`                                                         |
+| `ADMIN_OIDC_DISCOVERY_URL`    | OIDC mode only                 | Provider discovery root or well-known URL                                     |
+| `ADMIN_OIDC_CLIENT_ID`        | OIDC mode only                 | OAuth/OIDC client ID                                                          |
+| `ADMIN_OIDC_CLIENT_SECRET`    | OIDC mode only                 | OAuth/OIDC client secret                                                      |
+| `ADMIN_OIDC_SCOPES`           | No                             | Defaults to `openid profile email`                                            |
+| `ADMIN_OIDC_ALLOWED_EMAILS`   | OIDC mode: one of two required | Comma-separated allow-list of admin email addresses                           |
+| `ADMIN_OIDC_ALLOWED_SUBJECTS` | OIDC mode: one of two required | Comma-separated allow-list of `sub` claim values                              |
+| `OTEL_ENABLED`                | No                             | Set `true` to activate OpenTelemetry                                          |
+| `OTEL_SERVICE_NAME`           | No                             | Service name in traces and logs                                               |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | No                             | OTLP/HTTP collector URL (required when `OTEL_ENABLED=true`)                   |
+| `LOG_LEVEL`                   | No                             | Pino log level                                                                |
+| `LOG_PRETTY`                  | No                             | Pretty-print logs (development only)                                          |
 
----
+Admin auth modes are mutually exclusive. Do not set both `ADMIN_PASSWORD` and `ADMIN_OIDC_*` values at the same time.
 
 ## Database migration
 
-Run migrations before starting the server (safe to run on every deploy — idempotent):
+Run migrations before starting the server:
 
 ```bash
 npx prisma migrate deploy
 ```
 
----
-
 ## Starting the server
-
-The `start` script loads the OpenTelemetry instrumentation module before SvelteKit starts, which is required for OTEL to patch Node internals in time:
 
 ```bash
 npm run start
@@ -71,75 +64,48 @@ npm run start
 
 This runs:
 
-```
+```bash
 node --import ./instrumentation.js ./build/index.js
 ```
 
-When `OTEL_ENABLED=false` (the default), the instrumentation module is a no-op and adds zero overhead.
-
 The server listens on `PORT` (default `3000`) and `HOST` (default `0.0.0.0`).
-
----
 
 ## Uploads directory
 
 Encrypted file attachments are stored under `uploads/` in the working directory. Ensure this directory is on a persistent volume if running inside a container.
 
----
+## Local OIDC testing with Authentik
+
+The repository Docker Compose file now includes an optional Authentik stack behind the `oidc` profile.
+
+1. Copy `.env.example` to `.env`.
+2. Set `ADMIN_AUTH_MODE=oidc`.
+3. Leave `ADMIN_PASSWORD` empty.
+4. Set `ORIGIN=http://localhost:3000`.
+5. Pick secure values for `AUTHENTIK_POSTGRES_PASSWORD`, `AUTHENTIK_SECRET_KEY`, `AUTHENTIK_BOOTSTRAP_PASSWORD`, and `AUTHENTIK_BOOTSTRAP_TOKEN`.
+6. Start the stack with `docker compose --profile oidc up --build`.
+7. Sign in to Authentik at `http://localhost:9000/if/admin/` with `AUTHENTIK_BOOTSTRAP_EMAIL` and `AUTHENTIK_BOOTSTRAP_PASSWORD`.
+8. Create an OAuth2/OpenID Connect provider and application for the reporting tool.
+9. Register `http://localhost:3000/admin/login/oidc/callback` as the redirect URI.
+10. Set:
+
+```bash
+ADMIN_OIDC_DISCOVERY_URL=http://localhost:9000/application/o/reporting-tool/
+ADMIN_OIDC_CLIENT_ID=<client id from authentik>
+ADMIN_OIDC_CLIENT_SECRET=<client secret from authentik>
+ADMIN_OIDC_ALLOWED_EMAILS=admin@example.com
+```
+
+11. Restart the app container if you changed `.env`.
+12. Visit `http://localhost:3000/admin/login` and complete the OIDC flow.
 
 ## Production checklist
 
-- [ ] `DATABASE_URL` points to a persistent volume, not a temporary filesystem
-- [ ] `uploads/` is on a persistent volume
-- [ ] `ADMIN_PASSWORD` is at least 16 characters and kept secret
-- [ ] `SESSION_SECRET` is at least 32 random hex characters and kept secret
-- [ ] HTTPS is terminated at a reverse proxy (nginx, Caddy, etc.) — the app does not handle TLS
-- [ ] `LOG_PRETTY=false` in production (JSON output is required for log aggregators)
-- [ ] `OTEL_ENABLED=true` and `OTEL_EXPORTER_OTLP_ENDPOINT` configured if you want telemetry
-
----
-
-## Reverse proxy (nginx example)
-
-```nginx
-server {
-    listen 443 ssl;
-    server_name reporting.example.com;
-
-    ssl_certificate     /etc/letsencrypt/live/reporting.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/reporting.example.com/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
----
-
-## Docker (optional)
-
-```dockerfile
-FROM node:20-slim AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npx prisma generate && \
-    npx @inlang/paraglide-js compile --project ./project.inlang && \
-    npm run build
-
-FROM node:20-slim
-WORKDIR /app
-COPY --from=builder /app/build ./build
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json .
-COPY --from=builder /app/prisma ./prisma
-VOLUME ["/app/uploads", "/app/data"]
-ENV DATABASE_URL=file:/app/data/reporting-tool.db
-EXPOSE 3000
-CMD ["npm", "run", "start"]
-```
+- `DATABASE_URL` points to persistent storage
+- `uploads/` is on persistent storage
+- `SESSION_SECRET` is random and kept secret
+- Password mode: `ADMIN_PASSWORD` is at least 16 characters and kept secret
+- OIDC mode: the client is confidential and restricted to admin identities
+- HTTPS is terminated at a reverse proxy
+- `LOG_PRETTY=false` in production
+- `OTEL_ENABLED=true` and `OTEL_EXPORTER_OTLP_ENDPOINT` configured if you want telemetry

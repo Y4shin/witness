@@ -2,23 +2,29 @@ services:
   app:
     build: .
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
-      # Required: set this to your public-facing URL (used by SvelteKit for
-      # CSRF protection and absolute URL generation).
-      ORIGIN: "https://your-domain.example.com"
+      # Required: set this to the public URL that serves the app.
+      ORIGIN: '${ORIGIN:-http://localhost:3000}'
 
       # SQLite database stored on the named volume below.
-      DATABASE_URL: "file:/data/app.db"
+      DATABASE_URL: '${DATABASE_URL:-file:/data/app.db}'
 
-      # Session signing secret — generate with:
+      # Session signing secret. Generate with:
       #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-      SESSION_SECRET: "change-me-to-64-hex-chars"
+      SESSION_SECRET: '${SESSION_SECRET:-change-me-to-64-hex-chars}'
 
-      # Admin console password (at least 16 characters).
-      ADMIN_PASSWORD: "change-me-to-a-strong-password"
+      # Admin auth configuration. Default is password mode for backwards compatibility.
+      ADMIN_AUTH_MODE: '${ADMIN_AUTH_MODE:-password}'
+      ADMIN_PASSWORD: '${ADMIN_PASSWORD-}'
+      ADMIN_OIDC_DISCOVERY_URL: '${ADMIN_OIDC_DISCOVERY_URL:-}'
+      ADMIN_OIDC_CLIENT_ID: '${ADMIN_OIDC_CLIENT_ID:-}'
+      ADMIN_OIDC_CLIENT_SECRET: '${ADMIN_OIDC_CLIENT_SECRET:-}'
+      ADMIN_OIDC_SCOPES: '${ADMIN_OIDC_SCOPES:-openid profile email}'
+      ADMIN_OIDC_ALLOWED_EMAILS: '${ADMIN_OIDC_ALLOWED_EMAILS:-}'
+      ADMIN_OIDC_ALLOWED_SUBJECTS: '${ADMIN_OIDC_ALLOWED_SUBJECTS:-}'
 
-      # ── Optional: S3-compatible object storage ─────────────────────────────
+      # Optional: S3-compatible object storage.
       # Remove these to use the local filesystem backend (uploads volume below).
       # S3_ENDPOINT: "https://fsn1.your-objectstorage.com"
       # S3_BUCKET: "my-witness-files"
@@ -26,21 +32,89 @@ services:
       # S3_SECRET_ACCESS_KEY: ""
       # S3_REGION: "eu-central"
 
-      # ── Optional: OpenTelemetry ────────────────────────────────────────────
+      # Optional: OpenTelemetry.
       # OTEL_ENABLED: "true"
       # OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
       # OTEL_SERVICE_NAME: "witness"
 
       # Log level: trace | debug | info | warn | error
-      LOG_LEVEL: "info"
+      LOG_LEVEL: '${LOG_LEVEL:-info}'
+      LOG_PRETTY: '${LOG_PRETTY:-false}'
     volumes:
-      # SQLite database — persisted across container restarts.
+      # SQLite database persisted across container restarts.
       - db_data:/data
-      # Encrypted file uploads — only needed with the local storage backend.
-      # Remove this volume if using S3.
+      # Encrypted file uploads. Remove this if you use S3 storage.
       - uploads:/app/uploads
+    restart: unless-stopped
+
+  authentik-postgresql:
+    profiles: ['oidc']
+    image: docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_DB: '${AUTHENTIK_POSTGRES_DB:-authentik}'
+      POSTGRES_USER: '${AUTHENTIK_POSTGRES_USER:-authentik}'
+      POSTGRES_PASSWORD: '${AUTHENTIK_POSTGRES_PASSWORD:-change-me-authentik-db-password}'
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    volumes:
+      - authentik_db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  authentik-server:
+    profiles: ['oidc']
+    image: 'ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2026.2.1}'
+    command: server
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+    environment:
+      AUTHENTIK_SECRET_KEY: '${AUTHENTIK_SECRET_KEY:-change-me-authentik-secret-key}'
+      AUTHENTIK_ERROR_REPORTING__ENABLED: '${AUTHENTIK_ERROR_REPORTING__ENABLED:-false}'
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+      AUTHENTIK_POSTGRESQL__NAME: '${AUTHENTIK_POSTGRES_DB:-authentik}'
+      AUTHENTIK_POSTGRESQL__USER: '${AUTHENTIK_POSTGRES_USER:-authentik}'
+      AUTHENTIK_POSTGRESQL__PASSWORD: '${AUTHENTIK_POSTGRES_PASSWORD:-change-me-authentik-db-password}'
+      AUTHENTIK_BOOTSTRAP_EMAIL: '${AUTHENTIK_BOOTSTRAP_EMAIL:-akadmin@example.com}'
+      AUTHENTIK_BOOTSTRAP_PASSWORD: '${AUTHENTIK_BOOTSTRAP_PASSWORD:-change-me-authentik-admin-password}'
+      AUTHENTIK_BOOTSTRAP_TOKEN: '${AUTHENTIK_BOOTSTRAP_TOKEN:-change-me-authentik-api-token}'
+    ports:
+      - '${AUTHENTIK_HTTP_PORT:-9000}:9000'
+      - '${AUTHENTIK_HTTPS_PORT:-9443}:9443'
+    volumes:
+      - authentik_data:/data
+    shm_size: 512mb
+    restart: unless-stopped
+
+  authentik-worker:
+    profiles: ['oidc']
+    image: 'ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2026.2.1}'
+    command: worker
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+    environment:
+      AUTHENTIK_SECRET_KEY: '${AUTHENTIK_SECRET_KEY:-change-me-authentik-secret-key}'
+      AUTHENTIK_ERROR_REPORTING__ENABLED: '${AUTHENTIK_ERROR_REPORTING__ENABLED:-false}'
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+      AUTHENTIK_POSTGRESQL__NAME: '${AUTHENTIK_POSTGRES_DB:-authentik}'
+      AUTHENTIK_POSTGRESQL__USER: '${AUTHENTIK_POSTGRES_USER:-authentik}'
+      AUTHENTIK_POSTGRESQL__PASSWORD: '${AUTHENTIK_POSTGRES_PASSWORD:-change-me-authentik-db-password}'
+      AUTHENTIK_BOOTSTRAP_EMAIL: '${AUTHENTIK_BOOTSTRAP_EMAIL:-akadmin@example.com}'
+      AUTHENTIK_BOOTSTRAP_PASSWORD: '${AUTHENTIK_BOOTSTRAP_PASSWORD:-change-me-authentik-admin-password}'
+      AUTHENTIK_BOOTSTRAP_TOKEN: '${AUTHENTIK_BOOTSTRAP_TOKEN:-change-me-authentik-api-token}'
+    volumes:
+      - authentik_data:/data
+    shm_size: 512mb
     restart: unless-stopped
 
 volumes:
   db_data:
   uploads:
+  authentik_db:
+  authentik_data:
