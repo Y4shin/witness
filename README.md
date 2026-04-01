@@ -51,8 +51,9 @@ OIDC admin mode:
 - `ADMIN_OIDC_SCOPES`
 - `ADMIN_OIDC_ALLOWED_EMAILS`
 - `ADMIN_OIDC_ALLOWED_SUBJECTS`
+- `ADMIN_OIDC_ALLOWED_GROUPS`
 
-In OIDC mode, at least one of `ADMIN_OIDC_ALLOWED_EMAILS` or `ADMIN_OIDC_ALLOWED_SUBJECTS` must be set.
+In OIDC mode, at least one of `ADMIN_OIDC_ALLOWED_EMAILS`, `ADMIN_OIDC_ALLOWED_SUBJECTS`, or `ADMIN_OIDC_ALLOWED_GROUPS` must be set.
 
 ## Admin OIDC Setup
 
@@ -86,6 +87,7 @@ ADMIN_OIDC_SCOPES=openid profile email
 ADMIN_OIDC_ALLOWED_EMAILS=admin1@example.com,admin2@example.com
 # or
 # ADMIN_OIDC_ALLOWED_SUBJECTS=uuid-or-subject-1,uuid-or-subject-2
+# ADMIN_OIDC_ALLOWED_GROUPS=reporting-tool-admin-access
 ```
 
 Important:
@@ -108,19 +110,22 @@ The app verifies:
 - issuer and audience from the provider metadata and client ID
 - PKCE state and nonce round-trips
 - ID token signature via provider JWKS
-- allow-list match on email and/or `sub`
+- allow-list match on verified email, `sub`, and/or `groups`
 
 ### 4. Restrict who can log into `/admin`
 
-Use one or both of:
+Use one or more of:
 
 - `ADMIN_OIDC_ALLOWED_EMAILS`
 - `ADMIN_OIDC_ALLOWED_SUBJECTS`
+- `ADMIN_OIDC_ALLOWED_GROUPS`
 
 Recommendations:
 
 - prefer `ADMIN_OIDC_ALLOWED_SUBJECTS` if your identity system gives stable subject identifiers
+- prefer `ADMIN_OIDC_ALLOWED_GROUPS` when your provider already manages admin membership centrally
 - use `ADMIN_OIDC_ALLOWED_EMAILS` only for verified admin accounts
+- if you use `ADMIN_OIDC_ALLOWED_GROUPS`, make sure the provider includes a `groups` claim in the ID token or userinfo response
 - keep the list short and explicit
 
 ### 5. Restart the app and verify login
@@ -155,6 +160,8 @@ ADMIN_OIDC_DISCOVERY_URL=https://auth.example.com/application/o/reporting-tool/
 ```
 
 Depending on your Authentik slug, the final path segment may differ from `reporting-tool`.
+If you want group-based admin access, expose the Authentik `groups` claim and set
+`ADMIN_OIDC_ALLOWED_GROUPS=reporting-tool-admin-access`.
 
 ## Local Authentik Testing
 

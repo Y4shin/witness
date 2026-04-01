@@ -69,8 +69,27 @@ describe('admin auth', () => {
 		mockEnv.ADMIN_OIDC_CLIENT_SECRET = 'secret';
 
 		expect(() => getAdminAuthConfig()).toThrow(
-			'OIDC admin auth requires ADMIN_OIDC_ALLOWED_EMAILS or ADMIN_OIDC_ALLOWED_SUBJECTS.'
+			'OIDC admin auth requires ADMIN_OIDC_ALLOWED_EMAILS, ADMIN_OIDC_ALLOWED_SUBJECTS, or ADMIN_OIDC_ALLOWED_GROUPS.'
 		);
+	});
+
+	it('accepts oidc configuration when only allowed groups are configured', () => {
+		mockEnv.ADMIN_AUTH_MODE = 'oidc';
+		mockEnv.ADMIN_OIDC_DISCOVERY_URL = 'https://auth-groups.example/application/o/reporting-tool/';
+		mockEnv.ADMIN_OIDC_CLIENT_ID = 'reporting-tool';
+		mockEnv.ADMIN_OIDC_CLIENT_SECRET = 'secret';
+		mockEnv.ADMIN_OIDC_ALLOWED_GROUPS = 'reporting-tool-admin-access, security-admins';
+
+		expect(getAdminAuthConfig()).toEqual({
+			mode: 'oidc',
+			discoveryUrl: 'https://auth-groups.example/application/o/reporting-tool/',
+			clientId: 'reporting-tool',
+			clientSecret: 'secret',
+			scopes: 'openid profile email',
+			allowedEmails: [],
+			allowedSubjects: [],
+			allowedGroups: ['reporting-tool-admin-access', 'security-admins']
+		});
 	});
 
 	it('creates and revokes admin sessions', () => {
@@ -166,12 +185,225 @@ describe('admin auth', () => {
 		});
 	});
 
+	it('rejects oidc login for an allowed but unverified email address', async () => {
+		mockEnv.ADMIN_AUTH_MODE = 'oidc';
+		mockEnv.ADMIN_OIDC_DISCOVERY_URL =
+			'https://auth-unverified.example/application/o/reporting-tool/';
+		mockEnv.ADMIN_OIDC_CLIENT_ID = 'reporting-tool';
+		mockEnv.ADMIN_OIDC_CLIENT_SECRET = 'secret';
+		mockEnv.ADMIN_OIDC_ALLOWED_EMAILS = 'admin@example.com';
+
+		fetchMock
+			.mockResolvedValueOnce(
+				jsonResponse({
+					issuer: 'https://auth-unverified.example/application/o/reporting-tool/',
+					authorization_endpoint:
+						'https://auth-unverified.example/application/o/reporting-tool/authorize',
+					token_endpoint: 'https://auth-unverified.example/application/o/reporting-tool/token',
+					jwks_uri: 'https://auth-unverified.example/application/o/reporting-tool/jwks/'
+				})
+			)
+			.mockResolvedValueOnce(
+				jsonResponse({
+					id_token: 'header.payload.signature'
+				})
+			);
+
+		mockJwtVerify.mockResolvedValueOnce({
+			payload: {
+				sub: 'user-unverified',
+				nonce: 'expected-unverified-nonce',
+				email: 'admin@example.com',
+				email_verified: false
+			}
+		});
+
+		await expect(
+			finishAdminOidcLogin({
+				currentUrl: new URL(
+					'http://localhost:3000/admin/login/oidc/callback?code=unverified&state=state-unverified'
+				),
+				code: 'unverified',
+				returnedState: 'state-unverified',
+				expectedState: 'state-unverified',
+				expectedNonce: 'expected-unverified-nonce',
+				codeVerifier: 'unverified-verifier'
+			})
+		).rejects.toThrow('The authenticated account email address is not verified.');
+	});
+
+	it('completes oidc login for an allowed subject', async () => {
+		mockEnv.ADMIN_AUTH_MODE = 'oidc';
+		mockEnv.ADMIN_OIDC_DISCOVERY_URL = 'https://auth-subject.example/application/o/reporting-tool/';
+		mockEnv.ADMIN_OIDC_CLIENT_ID = 'reporting-tool';
+		mockEnv.ADMIN_OIDC_CLIENT_SECRET = 'secret';
+		mockEnv.ADMIN_OIDC_ALLOWED_SUBJECTS = 'subject-123';
+
+		fetchMock
+			.mockResolvedValueOnce(
+				jsonResponse({
+					issuer: 'https://auth-subject.example/application/o/reporting-tool/',
+					authorization_endpoint:
+						'https://auth-subject.example/application/o/reporting-tool/authorize',
+					token_endpoint: 'https://auth-subject.example/application/o/reporting-tool/token',
+					jwks_uri: 'https://auth-subject.example/application/o/reporting-tool/jwks/'
+				})
+			)
+			.mockResolvedValueOnce(
+				jsonResponse({
+					id_token: 'header.payload.signature'
+				})
+			);
+
+		mockJwtVerify.mockResolvedValueOnce({
+			payload: {
+				sub: 'subject-123',
+				nonce: 'expected-nonce',
+				email: 'subject-admin@example.com',
+				email_verified: false,
+				name: 'Subject Admin'
+			}
+		});
+
+		const identity = await finishAdminOidcLogin({
+			currentUrl: new URL('http://localhost:3000/admin/login/oidc/callback?code=abc&state=state-3'),
+			code: 'abc',
+			returnedState: 'state-3',
+			expectedState: 'state-3',
+			expectedNonce: 'expected-nonce',
+			codeVerifier: 'verifier-3'
+		});
+
+		expect(identity).toEqual({
+			source: 'oidc',
+			subject: 'subject-123',
+			email: 'subject-admin@example.com',
+			name: 'Subject Admin'
+		});
+	});
+
+	it('completes oidc login for an allowed group from the id token', async () => {
+		mockEnv.ADMIN_AUTH_MODE = 'oidc';
+		mockEnv.ADMIN_OIDC_DISCOVERY_URL =
+			'https://auth-groups-token.example/application/o/reporting-tool/';
+		mockEnv.ADMIN_OIDC_CLIENT_ID = 'reporting-tool';
+		mockEnv.ADMIN_OIDC_CLIENT_SECRET = 'secret';
+		mockEnv.ADMIN_OIDC_ALLOWED_GROUPS = 'reporting-tool-admin-access';
+
+		fetchMock
+			.mockResolvedValueOnce(
+				jsonResponse({
+					issuer: 'https://auth-groups-token.example/application/o/reporting-tool/',
+					authorization_endpoint:
+						'https://auth-groups-token.example/application/o/reporting-tool/authorize',
+					token_endpoint: 'https://auth-groups-token.example/application/o/reporting-tool/token',
+					jwks_uri: 'https://auth-groups-token.example/application/o/reporting-tool/jwks/'
+				})
+			)
+			.mockResolvedValueOnce(
+				jsonResponse({
+					id_token: 'header.payload.signature'
+				})
+			);
+
+		mockJwtVerify.mockResolvedValueOnce({
+			payload: {
+				sub: 'group-user-1',
+				nonce: 'expected-group-nonce',
+				email: 'group-admin@example.com',
+				email_verified: false,
+				name: 'Group Admin',
+				groups: ['reporting-tool-admin-access', 'staff']
+			}
+		});
+
+		const identity = await finishAdminOidcLogin({
+			currentUrl: new URL(
+				'http://localhost:3000/admin/login/oidc/callback?code=group-code&state=state-group'
+			),
+			code: 'group-code',
+			returnedState: 'state-group',
+			expectedState: 'state-group',
+			expectedNonce: 'expected-group-nonce',
+			codeVerifier: 'group-verifier'
+		});
+
+		expect(identity).toEqual({
+			source: 'oidc',
+			subject: 'group-user-1',
+			email: 'group-admin@example.com',
+			name: 'Group Admin'
+		});
+	});
+
+	it('completes oidc login for an allowed group from userinfo', async () => {
+		mockEnv.ADMIN_AUTH_MODE = 'oidc';
+		mockEnv.ADMIN_OIDC_DISCOVERY_URL =
+			'https://auth-groups-userinfo.example/application/o/reporting-tool/';
+		mockEnv.ADMIN_OIDC_CLIENT_ID = 'reporting-tool';
+		mockEnv.ADMIN_OIDC_CLIENT_SECRET = 'secret';
+		mockEnv.ADMIN_OIDC_ALLOWED_GROUPS = 'reporting-tool-admin-access';
+
+		fetchMock
+			.mockResolvedValueOnce(
+				jsonResponse({
+					issuer: 'https://auth-groups-userinfo.example/application/o/reporting-tool/',
+					authorization_endpoint:
+						'https://auth-groups-userinfo.example/application/o/reporting-tool/authorize',
+					token_endpoint: 'https://auth-groups-userinfo.example/application/o/reporting-tool/token',
+					jwks_uri: 'https://auth-groups-userinfo.example/application/o/reporting-tool/jwks/',
+					userinfo_endpoint:
+						'https://auth-groups-userinfo.example/application/o/reporting-tool/userinfo'
+				})
+			)
+			.mockResolvedValueOnce(
+				jsonResponse({
+					id_token: 'header.payload.signature',
+					access_token: 'userinfo-token'
+				})
+			)
+			.mockResolvedValueOnce(
+				jsonResponse({
+					sub: 'group-user-2',
+					email: 'userinfo-admin@example.com',
+					email_verified: true,
+					name: 'Userinfo Admin',
+					groups: 'reporting-tool-admin-access'
+				})
+			);
+
+		mockJwtVerify.mockResolvedValueOnce({
+			payload: {
+				sub: 'group-user-2',
+				nonce: 'expected-userinfo-nonce'
+			}
+		});
+
+		const identity = await finishAdminOidcLogin({
+			currentUrl: new URL(
+				'http://localhost:3000/admin/login/oidc/callback?code=userinfo-code&state=state-userinfo'
+			),
+			code: 'userinfo-code',
+			returnedState: 'state-userinfo',
+			expectedState: 'state-userinfo',
+			expectedNonce: 'expected-userinfo-nonce',
+			codeVerifier: 'userinfo-verifier'
+		});
+
+		expect(identity).toEqual({
+			source: 'oidc',
+			subject: 'group-user-2',
+			email: 'userinfo-admin@example.com',
+			name: 'Userinfo Admin'
+		});
+	});
+
 	it('rejects oidc login for an unauthorized identity', async () => {
 		mockEnv.ADMIN_AUTH_MODE = 'oidc';
 		mockEnv.ADMIN_OIDC_DISCOVERY_URL = 'https://auth-three.example/application/o/reporting-tool/';
 		mockEnv.ADMIN_OIDC_CLIENT_ID = 'reporting-tool';
 		mockEnv.ADMIN_OIDC_CLIENT_SECRET = 'secret';
-		mockEnv.ADMIN_OIDC_ALLOWED_EMAILS = 'admin@example.com';
+		mockEnv.ADMIN_OIDC_ALLOWED_GROUPS = 'reporting-tool-admin-access';
 
 		fetchMock
 			.mockResolvedValueOnce(
@@ -194,7 +426,8 @@ describe('admin auth', () => {
 				sub: 'user-2',
 				nonce: 'expected-nonce',
 				email: 'outsider@example.com',
-				email_verified: true
+				email_verified: true,
+				groups: ['staff']
 			}
 		});
 

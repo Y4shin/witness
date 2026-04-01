@@ -23,6 +23,7 @@ services:
       ADMIN_OIDC_SCOPES: '${ADMIN_OIDC_SCOPES:-openid profile email}'
       ADMIN_OIDC_ALLOWED_EMAILS: '${ADMIN_OIDC_ALLOWED_EMAILS:-}'
       ADMIN_OIDC_ALLOWED_SUBJECTS: '${ADMIN_OIDC_ALLOWED_SUBJECTS:-}'
+      ADMIN_OIDC_ALLOWED_GROUPS: '${ADMIN_OIDC_ALLOWED_GROUPS:-}'
 
       # Optional: S3-compatible object storage.
       # Remove these to use the local filesystem backend (uploads volume below).

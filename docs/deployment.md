@@ -27,24 +27,25 @@ The output is written to `build/`.
 
 Copy `.env.example` to `.env` and fill in the values before starting the server.
 
-| Variable                      | Required                       | Description                                                                   |
-| ----------------------------- | ------------------------------ | ----------------------------------------------------------------------------- |
-| `ORIGIN`                      | Yes                            | Public origin for CSRF protection, absolute redirects, and OIDC callback URLs |
-| `DATABASE_URL`                | Yes                            | SQLite file path (`file:./reporting-tool.db`) or libsql/Turso URL             |
-| `SESSION_SECRET`              | Yes                            | At least 32 random bytes (hex) used to sign session tokens                    |
-| `ADMIN_AUTH_MODE`             | Yes                            | `password` or `oidc`                                                          |
-| `ADMIN_PASSWORD`              | Password mode only             | Password for `/admin`                                                         |
-| `ADMIN_OIDC_DISCOVERY_URL`    | OIDC mode only                 | Provider discovery root or well-known URL                                     |
-| `ADMIN_OIDC_CLIENT_ID`        | OIDC mode only                 | OAuth/OIDC client ID                                                          |
-| `ADMIN_OIDC_CLIENT_SECRET`    | OIDC mode only                 | OAuth/OIDC client secret                                                      |
-| `ADMIN_OIDC_SCOPES`           | No                             | Defaults to `openid profile email`                                            |
-| `ADMIN_OIDC_ALLOWED_EMAILS`   | OIDC mode: one of two required | Comma-separated allow-list of admin email addresses                           |
-| `ADMIN_OIDC_ALLOWED_SUBJECTS` | OIDC mode: one of two required | Comma-separated allow-list of `sub` claim values                              |
-| `OTEL_ENABLED`                | No                             | Set `true` to activate OpenTelemetry                                          |
-| `OTEL_SERVICE_NAME`           | No                             | Service name in traces and logs                                               |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | No                             | OTLP/HTTP collector URL (required when `OTEL_ENABLED=true`)                   |
-| `LOG_LEVEL`                   | No                             | Pino log level                                                                |
-| `LOG_PRETTY`                  | No                             | Pretty-print logs (development only)                                          |
+| Variable                      | Required                         | Description                                                                   |
+| ----------------------------- | -------------------------------- | ----------------------------------------------------------------------------- |
+| `ORIGIN`                      | Yes                              | Public origin for CSRF protection, absolute redirects, and OIDC callback URLs |
+| `DATABASE_URL`                | Yes                              | SQLite file path (`file:./reporting-tool.db`) or libsql/Turso URL             |
+| `SESSION_SECRET`              | Yes                              | At least 32 random bytes (hex) used to sign session tokens                    |
+| `ADMIN_AUTH_MODE`             | Yes                              | `password` or `oidc`                                                          |
+| `ADMIN_PASSWORD`              | Password mode only               | Password for `/admin`                                                         |
+| `ADMIN_OIDC_DISCOVERY_URL`    | OIDC mode only                   | Provider discovery root or well-known URL                                     |
+| `ADMIN_OIDC_CLIENT_ID`        | OIDC mode only                   | OAuth/OIDC client ID                                                          |
+| `ADMIN_OIDC_CLIENT_SECRET`    | OIDC mode only                   | OAuth/OIDC client secret                                                      |
+| `ADMIN_OIDC_SCOPES`           | No                               | Defaults to `openid profile email`                                            |
+| `ADMIN_OIDC_ALLOWED_EMAILS`   | OIDC mode: one of three required | Comma-separated allow-list of admin email addresses                           |
+| `ADMIN_OIDC_ALLOWED_SUBJECTS` | OIDC mode: one of three required | Comma-separated allow-list of `sub` claim values                              |
+| `ADMIN_OIDC_ALLOWED_GROUPS`   | OIDC mode: one of three required | Comma-separated allow-list of OIDC `groups` claim values                      |
+| `OTEL_ENABLED`                | No                               | Set `true` to activate OpenTelemetry                                          |
+| `OTEL_SERVICE_NAME`           | No                               | Service name in traces and logs                                               |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | No                               | OTLP/HTTP collector URL (required when `OTEL_ENABLED=true`)                   |
+| `LOG_LEVEL`                   | No                               | Pino log level                                                                |
+| `LOG_PRETTY`                  | No                               | Pretty-print logs (development only)                                          |
 
 Admin auth modes are mutually exclusive. Do not set both `ADMIN_PASSWORD` and `ADMIN_OIDC_*` values at the same time.
 
@@ -93,11 +94,14 @@ The repository Docker Compose file now includes an optional Authentik stack behi
 ADMIN_OIDC_DISCOVERY_URL=http://localhost:9000/application/o/reporting-tool/
 ADMIN_OIDC_CLIENT_ID=<client id from authentik>
 ADMIN_OIDC_CLIENT_SECRET=<client secret from authentik>
-ADMIN_OIDC_ALLOWED_EMAILS=admin@example.com
+ADMIN_OIDC_ALLOWED_GROUPS=reporting-tool-admin-access
 ```
 
 11. Restart the app container if you changed `.env`.
 12. Visit `http://localhost:3000/admin/login` and complete the OIDC flow.
+
+If you use group-based authorization, ensure the provider exposes a `groups` claim in the
+ID token or userinfo response.
 
 ## Production checklist
 
@@ -106,6 +110,7 @@ ADMIN_OIDC_ALLOWED_EMAILS=admin@example.com
 - `SESSION_SECRET` is random and kept secret
 - Password mode: `ADMIN_PASSWORD` is at least 16 characters and kept secret
 - OIDC mode: the client is confidential and restricted to admin identities
+- OIDC mode: at least one of `ADMIN_OIDC_ALLOWED_EMAILS`, `ADMIN_OIDC_ALLOWED_SUBJECTS`, or `ADMIN_OIDC_ALLOWED_GROUPS` is set
 - HTTPS is terminated at a reverse proxy
 - `LOG_PRETTY=false` in production
 - `OTEL_ENABLED=true` and `OTEL_EXPORTER_OTLP_ENDPOINT` configured if you want telemetry

@@ -23,6 +23,7 @@ type OidcAdminAuthConfig = {
 	scopes: string;
 	allowedEmails: string[];
 	allowedSubjects: string[];
+	allowedGroups: string[];
 };
 
 export type AdminAuthConfig = PasswordAdminAuthConfig | OidcAdminAuthConfig;
@@ -60,6 +61,7 @@ type OidcUserInfo = {
 	email_verified?: boolean;
 	name?: string;
 	preferred_username?: string;
+	groups?: string | string[];
 };
 
 type OidcAuthorizationRequest = {
@@ -113,7 +115,8 @@ const OIDC_ENV_KEYS = [
 	'ADMIN_OIDC_CLIENT_SECRET',
 	'ADMIN_OIDC_SCOPES',
 	'ADMIN_OIDC_ALLOWED_EMAILS',
-	'ADMIN_OIDC_ALLOWED_SUBJECTS'
+	'ADMIN_OIDC_ALLOWED_SUBJECTS',
+	'ADMIN_OIDC_ALLOWED_GROUPS'
 ] as const;
 
 export class AdminAuthConfigError extends Error {
@@ -145,6 +148,21 @@ function parseCsv(value: string | undefined): string[] {
 		.split(',')
 		.map((part) => part.trim())
 		.filter(Boolean);
+}
+
+function normalizeGroupsClaim(value: unknown): string[] {
+	if (typeof value === 'string') {
+		return value.trim() ? [value.trim()] : [];
+	}
+
+	if (Array.isArray(value)) {
+		return value
+			.filter((entry): entry is string => typeof entry === 'string')
+			.map((entry) => entry.trim())
+			.filter(Boolean);
+	}
+
+	return [];
 }
 
 function hasAnyOidcEnv(): boolean {
@@ -221,10 +239,11 @@ export function getAdminAuthConfig(): AdminAuthConfig {
 
 	const allowedEmails = parseCsv(env.ADMIN_OIDC_ALLOWED_EMAILS).map((value) => value.toLowerCase());
 	const allowedSubjects = parseCsv(env.ADMIN_OIDC_ALLOWED_SUBJECTS);
+	const allowedGroups = parseCsv(env.ADMIN_OIDC_ALLOWED_GROUPS);
 
-	if (allowedEmails.length === 0 && allowedSubjects.length === 0) {
+	if (allowedEmails.length === 0 && allowedSubjects.length === 0 && allowedGroups.length === 0) {
 		throw new AdminAuthConfigError(
-			'OIDC admin auth requires ADMIN_OIDC_ALLOWED_EMAILS or ADMIN_OIDC_ALLOWED_SUBJECTS.'
+			'OIDC admin auth requires ADMIN_OIDC_ALLOWED_EMAILS, ADMIN_OIDC_ALLOWED_SUBJECTS, or ADMIN_OIDC_ALLOWED_GROUPS.'
 		);
 	}
 
@@ -235,7 +254,8 @@ export function getAdminAuthConfig(): AdminAuthConfig {
 		clientSecret: env.ADMIN_OIDC_CLIENT_SECRET!.trim(),
 		scopes: env.ADMIN_OIDC_SCOPES?.trim() || 'openid profile email',
 		allowedEmails,
-		allowedSubjects
+		allowedSubjects,
+		allowedGroups
 	};
 }
 
@@ -327,7 +347,7 @@ async function exchangeAuthorizationCode(
 function normalizeIdentity(
 	payload: Record<string, unknown>,
 	userInfo?: OidcUserInfo
-): AdminIdentity & { emailVerified: boolean; subject: string } {
+): AdminIdentity & { emailVerified: boolean; subject: string; groups: string[] } {
 	const email =
 		typeof userInfo?.email === 'string'
 			? userInfo.email
@@ -348,13 +368,18 @@ function normalizeIdentity(
 		typeof userInfo?.email_verified === 'boolean'
 			? userInfo.email_verified
 			: payload.email_verified !== false;
+	const groups = [
+		...normalizeGroupsClaim(payload.groups),
+		...normalizeGroupsClaim(userInfo?.groups)
+	];
 
 	return {
 		source: 'oidc',
 		subject: String(payload.sub),
 		email: email?.toLowerCase(),
 		name,
-		emailVerified
+		emailVerified,
+		groups: [...new Set(groups)]
 	};
 }
 
@@ -375,20 +400,23 @@ async function fetchUserInfo(
 
 function assertAuthorizedOidcIdentity(
 	config: OidcAdminAuthConfig,
-	identity: AdminIdentity & { emailVerified: boolean; subject: string }
+	identity: AdminIdentity & { emailVerified: boolean; subject: string; groups: string[] }
 ): AdminIdentity {
 	const allowedBySubject =
 		config.allowedSubjects.length > 0 && config.allowedSubjects.includes(identity.subject);
 	const allowedByEmail =
 		Boolean(identity.email) && config.allowedEmails.includes(identity.email!.toLowerCase());
+	const allowedByGroup =
+		config.allowedGroups.length > 0 &&
+		identity.groups.some((group) => config.allowedGroups.includes(group));
 
-	if (!allowedBySubject && !allowedByEmail) {
+	if (!allowedBySubject && !allowedByEmail && !allowedByGroup) {
 		throw new AdminOidcError(
 			'The authenticated account is not allowed to access the admin console.'
 		);
 	}
 
-	if (allowedByEmail && !identity.emailVerified) {
+	if (allowedByEmail && !identity.emailVerified && !allowedBySubject && !allowedByGroup) {
 		throw new AdminOidcError('The authenticated account email address is not verified.');
 	}
 

@@ -37,7 +37,8 @@ export default defineConfig({
 				ADMIN_OIDC_DISCOVERY_URL: 'http://127.0.0.1:5544',
 				ADMIN_OIDC_CLIENT_ID: 'reporting-tool-e2e',
 				ADMIN_OIDC_CLIENT_SECRET: 'reporting-tool-e2e-secret',
-				ADMIN_OIDC_ALLOWED_EMAILS: 'admin@example.com'
+				ADMIN_OIDC_ALLOWED_EMAILS: 'admin@example.com',
+				ADMIN_OIDC_ALLOWED_GROUPS: 'reporting-tool-admin-access'
 			}
 		}
 	],

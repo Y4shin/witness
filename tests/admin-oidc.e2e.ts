@@ -19,7 +19,9 @@ async function completeOidcLogin(
 }
 
 test.describe('admin console oidc login', () => {
-	test('allowed oidc identity can access the admin console', async ({ page }) => {
+	test('allowed oidc identity can access the admin console by email allow-list', async ({
+		page
+	}) => {
 		await completeOidcLogin(page, {
 			email: 'admin@example.com'
 		});
@@ -28,7 +30,16 @@ test.describe('admin console oidc login', () => {
 		await expect(page.locator('h1')).toHaveText('Admin console');
 	});
 
-	test('unapproved oidc identity is bounced back to the login page with an error', async ({
+	test('allowed oidc identity can access the admin console by group claim', async ({ page }) => {
+		await completeOidcLogin(page, {
+			email: 'group-admin@example.com'
+		});
+
+		await expect(page).toHaveURL('/admin');
+		await expect(page.locator('h1')).toHaveText('Admin console');
+	});
+
+	test('identity without an allowed group is bounced back to the login page with an error', async ({
 		page
 	}) => {
 		await completeOidcLogin(page, {

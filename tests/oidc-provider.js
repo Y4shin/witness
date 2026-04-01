@@ -7,6 +7,18 @@ const clientSecret = process.env.OIDC_TEST_PROVIDER_CLIENT_SECRET ?? 'reporting-
 const redirectUri =
 	process.env.OIDC_TEST_PROVIDER_REDIRECT_URI ?? 'http://localhost:5174/admin/login/oidc/callback';
 
+function getGroupsForAccount(accountId) {
+	if (accountId === 'group-admin@example.com') {
+		return ['reporting-tool-admin-access'];
+	}
+
+	if (accountId === 'multi-group-admin@example.com') {
+		return ['staff', 'reporting-tool-admin-access'];
+	}
+
+	return [];
+}
+
 const provider = new oidc.Provider(issuer, {
 	clients: [
 		{
@@ -21,10 +33,11 @@ const provider = new oidc.Provider(issuer, {
 	claims: {
 		openid: ['sub'],
 		email: ['email', 'email_verified'],
-		profile: ['name']
+		profile: ['name', 'groups']
 	},
 	async findAccount(_ctx, accountId) {
 		const email = accountId.toLowerCase();
+		const groups = getGroupsForAccount(email);
 		return {
 			accountId,
 			async claims(_use, scope) {
@@ -37,7 +50,8 @@ const provider = new oidc.Provider(issuer, {
 				}
 				if (scope?.includes('profile')) {
 					Object.assign(claims, {
-						name: email.split('@')[0] ?? accountId
+						name: email.split('@')[0] ?? accountId,
+						groups
 					});
 				}
 				return claims;
