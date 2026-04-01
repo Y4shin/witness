@@ -86,6 +86,21 @@ test.describe('PWA offline page', () => {
 		await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
 	});
 
+	test('shows a global offline-mode banner when the browser reports offline', async ({ page }) => {
+		await page.addInitScript(() => {
+			Object.defineProperty(Navigator.prototype, 'onLine', {
+				get: () => false,
+				configurable: true
+			});
+		});
+
+		await waitForServiceWorker(page, '/');
+
+		await expect(
+			page.getByRole('status').filter({ hasText: 'Offline mode is active' })
+		).toBeVisible({ timeout: 5000 });
+	});
+
 	test('does not intercept API requests (they fail normally when offline)', async ({
 		page,
 		context
@@ -95,7 +110,9 @@ test.describe('PWA offline page', () => {
 		await context.setOffline(true);
 
 		// API requests should bypass the SW and fail with a network error
-		const res = await page.request.fetch('/api/auth/challenge', { failOnStatusCode: false }).catch(() => null);
+		const res = await page.request
+			.fetch('/api/auth/challenge', { failOnStatusCode: false })
+			.catch(() => null);
 		// Either null (fetch threw) or a non-200 response — either way not the offline page HTML
 		if (res !== null) {
 			const body = await res.text();
@@ -126,13 +143,17 @@ test.describe('PWA offline page', () => {
 		await page.waitForLoadState('networkidle');
 
 		// Wait for the fire-and-forget cache.put to commit before going offline
-		await page.waitForFunction(async () => {
-			const keys = await caches.keys();
-			const navKey = keys.find((k: string) => k.startsWith('nav-cache-'));
-			if (!navKey) return false;
-			const cache = await caches.open(navKey);
-			return (await cache.match(location.href)) !== null;
-		}, undefined, { timeout: 10000 });
+		await page.waitForFunction(
+			async () => {
+				const keys = await caches.keys();
+				const navKey = keys.find((k: string) => k.startsWith('nav-cache-'));
+				if (!navKey) return false;
+				const cache = await caches.open(navKey);
+				return (await cache.match(location.href)) !== null;
+			},
+			undefined,
+			{ timeout: 10000 }
+		);
 
 		// Go offline and reload — the SW should serve the cached HTML
 		await context.setOffline(true);
@@ -142,6 +163,9 @@ test.describe('PWA offline page', () => {
 		await expect(page.getByRole('heading', { name: "You're offline" })).not.toBeVisible({
 			timeout: 5000
 		});
+		await expect(
+			page.getByRole('status').filter({ hasText: 'Offline mode is active' })
+		).toBeVisible({ timeout: 5000 });
 		// Some Witness app content should be present
 		const title = await page.title();
 		expect(title).toContain('Witness');

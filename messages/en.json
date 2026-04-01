@@ -244,6 +244,7 @@
 	"offline_title": "You're offline",
 	"offline_message": "Check your internet connection and try again.",
 	"offline_retry": "Try again",
+	"offline_mode_banner": "Offline mode is active. Cached pages may be shown until you reconnect.",
 	"submit_queued": "You're offline. Your submission has been saved and will be sent automatically when you reconnect.",
 	"sync_pending_count": "{count} submission(s) pending sync",
 	"sync_now_btn": "Sync now",

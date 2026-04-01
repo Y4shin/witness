@@ -14,6 +14,15 @@ const OFFLINE_PAGE = '/offline';
 // Pre-cache SvelteKit build artifacts + static files alongside the offline page.
 const PRECACHE_ASSETS = [...build, ...files];
 
+async function notifyClient(
+	clientId: string | undefined,
+	type: 'online-navigation' | 'offline-navigation'
+) {
+	if (!clientId) return;
+	const client = await self.clients.get(clientId);
+	client?.postMessage({ type });
+}
+
 // ── Install ────────────────────────────────────────────────────────────────
 
 self.addEventListener('install', (event) => {
@@ -78,8 +87,7 @@ self.addEventListener('fetch', (event) => {
 
 	// 4. Navigation requests (HTML) — network-first, stale-on-offline
 	const isNavigation =
-		event.request.mode === 'navigate' ||
-		event.request.headers.get('accept')?.includes('text/html');
+		event.request.mode === 'navigate' || event.request.headers.get('accept')?.includes('text/html');
 
 	if (isNavigation) {
 		event.respondWith(
@@ -89,7 +97,10 @@ self.addEventListener('fetch', (event) => {
 						const clone = res.clone();
 						// Use event.waitUntil so the SW isn't terminated before the write completes.
 						event.waitUntil(
-							caches.open(NAV_CACHE).then((cache) => cache.put(event.request.url, clone))
+							Promise.all([
+								caches.open(NAV_CACHE).then((cache) => cache.put(event.request.url, clone)),
+								notifyClient(event.clientId, 'online-navigation')
+							])
 						);
 					}
 					return res;
@@ -99,8 +110,12 @@ self.addEventListener('fetch', (event) => {
 					// some Chromium builds; cache.match(url) on an opened cache is reliable.
 					const navCache = await caches.open(NAV_CACHE);
 					const cached = await navCache.match(event.request.url);
-					if (cached) return cached;
+					if (cached) {
+						event.waitUntil(notifyClient(event.clientId, 'offline-navigation'));
+						return cached;
+					}
 					const offlineCache = await caches.open(OFFLINE_CACHE);
+					event.waitUntil(notifyClient(event.clientId, 'offline-navigation'));
 					return (await offlineCache.match(OFFLINE_PAGE))!;
 				})
 		);
