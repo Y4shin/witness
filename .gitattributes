@@ -1,0 +1,6 @@
+# Default: normalize line endings to LF on commit
+* text=auto eol=lf
+
+# Nix files must always be LF — CRLF breaks shell scripts in the Nix sandbox
+*.nix text eol=lf
+flake.lock text eol=lf
