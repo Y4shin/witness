@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { PUBLIC_VERSION } from '$env/static/public';
 	import { locales, getLocale, setLocale } from '$lib/paraglide/runtime';
 	import * as m from '$lib/paraglide/messages';
 	import OfflineModeBanner from '$lib/components/OfflineModeBanner.svelte';
@@ -52,3 +53,9 @@
 {/if}
 
 {@render children()}
+
+{#if !isAdminRoute && !isAuthRoute && data.memberId && PUBLIC_VERSION}
+	<footer class="border-t border-base-300 px-4 py-2 text-center text-xs text-base-content/40">
+		v{PUBLIC_VERSION}
+	</footer>
+{/if}

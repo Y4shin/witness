@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { PUBLIC_VERSION } from '$env/static/public';
 	import type { PageData, ActionData } from './$types';
 	import QrCode from '$lib/components/QrCode.svelte';
 	import * as m from '$lib/paraglide/messages';
@@ -128,4 +129,8 @@
 			</div>
 		</div>
 	</div>
+
+	{#if data.version}
+		<p class="text-center text-xs text-base-content/40 pt-2">v{data.version}</p>
+	{/if}
 </div>

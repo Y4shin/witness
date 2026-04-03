@@ -4,6 +4,9 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 
+ARG PUBLIC_VERSION
+ENV PUBLIC_VERSION=${PUBLIC_VERSION}
+
 COPY package*.json ./
 RUN npm ci
 
